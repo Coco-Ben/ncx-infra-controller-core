@@ -1662,7 +1662,7 @@ Requests a TLS certificate via cert-manager for the carbide-api service; this is
 
 This allows the service (via cert-manager flows) to create CertificateRequest resources in the namespace.
 
-#### Service Account and RBAC  (rolebinding.yaml)
+#### Service Account and RBAC (rolebinding.yaml)
 
 - **Kind**: RoleBinding
 - **Name**: carbide-api
@@ -1679,70 +1679,238 @@ This allows the service (via cert-manager flows) to create CertificateRequest re
 This binds the local Role to the carbide-api service account.
 
 
-| Variable | Source | Purpose |
-| --- | --- | --- |
-| `VAULT_TOKEN` | Secret `carbide-vault-token`, key `token` | Vault token |
-| `VAULT_ROLE_ID` | Secret `carbide-vault-approle-tokens`, key `VAULT_ROLE_ID` | AppRole auth (optional) |
-| `VAULT_SECRET_ID` | Secret `carbide-vault-approle-tokens`, key `VAULT_SECRET_ID` | AppRole auth (optional) |
-| `VAULT_ADDR` | ConfigMap `vault-cluster-info`, key `VAULT_SERVICE` | Vault base URL |
-| `VAULT_KV_MOUNT_LOCATION` | ConfigMap `vault-cluster-info`, key `FORGE_VAULT_MOUNT` | KV mount path |
-| `VAULT_PKI_MOUNT_LOCATION` | ConfigMap `vault-cluster-info`, key `FORGE_VAULT_PKI_MOUNT` | PKI mount path |
-| `VAULT_PKI_ROLE_NAME` | (hardcoded) `forge-cluster` | PKI role for cert issuance |
-| `DATASTORE_USER` | Secret `forge-system.carbide.forge-pg-cluster.credentials`, key `username` | PostgreSQL username |
-| `DATASTORE_PASSWORD` | Secret `forge-system.carbide.forge-pg-cluster.credentials`, key `password` | PostgreSQL password |
-| `DATASTORE_HOST` | ConfigMap `forge-system-carbide-database-config`, key `DB_HOST` | PostgreSQL host |
-| `DATASTORE_PORT` | ConfigMap `forge-system-carbide-database-config`, key `DB_PORT` | PostgreSQL port |
-| `DATASTORE_NAME` | ConfigMap `forge-system-carbide-database-config`, key `DB_NAME` | PostgreSQL DB name |
-| `CARBIDE_API_DATABASE_URL` | Composed from above | Final DB URL (overrides `database_url` in config) |
+#### Carbide API Configuration and Dependency Matrix
 
-**TLS Certificate**
+This section summarizes what you must provide and how it is used.
 
-`Certificate/carbide-api-certificate` requests a cert via cert-manager using
-ClusterIssuer `vault-forge-issuer`. The resulting Secret (`carbide-api-certificate`) is mounted
-at `/var/run/secrets/spiffe.io`. SPIFFE URI:
-`spiffe://forge.local/forge-system/sa/carbide-api`.
+##### Secrets
+
+- **Secret/carbide-vault-token**
+  - **Keys**:
+    - **token**: Vault token value
+  - **Used by**:  Deployment (env `VAULT_TOKEN`).
+  - **Purpose**: uthenticate carbide-api to Vault if not using AppRole.
+- **Secret/carbide-vault-approle-tokens** (optional)
+  - **Keys**:
+    - `VAULT_ROLE_ID`
+    - `VAULT_SECRET_ID`
+  - **Used by**: Deployment (env `VAULT_ROLE_ID`, `VAULT_SECRET_ID`)
+  - **Purpose**: AppRole authentication to Vault
+- **Secret/forge-system.carbide.forge-pg-cluster.credentials**
+  - **Keys**:
+    - `username`
+    - `password`
+  - **Used by**: Deployment (env `DATASTORE_USER`, `DATASTORE_PASSWORD`)
+  - **Purpose**: PostgreSQL credentials for both application and migrations
+- **Secret/forge-roots**
+  - **Keys**:
+    - `ca.crt`
+    - `etc.`
+  - **Used by**: Deployment volume mount at `/var/run/secrets/forge-roots`
+  - **Purpose**: Additional root CA bundle for validating peer certificates
+- **Secret/carbide-api-certificate**
+  - **Created by**: `Certificate/carbide-api-certificate` (via cert-manager)
+  - **Expected keys**:
+    - `tls.crt`
+    - `tls.key`
+    - `ca.crt`
+  - **Used by**:
+    - Deployment volume `spiffe`
+    - TLS paths in `carbide-api-config.toml`
+
+##### ConfigMaps
+
+- **ConfigMap/vault-cluster-info**
+  - **Required keys**:
+    - `VAULT_SERVICE` -> used as `VAULT_ADDR`
+    - `FORGE_VAULT_MOUNT` -> used as `VAULT_MOUNT_LOCATION`, `VAULT_KV_MOUNT_LOCATION`
+    - `FORGE_VAULT_PKI_MOUNT` -> used as `VAULT_PKI_MOUNT_LOCATION`
+  - **Used by**: Deployment env vars
+  - **Purpose**: Central configuration for Vault endpoints and mount paths
+- **ConfigMap/forge-system-carbide-database-config**
+  - **Required keys**:
+    - `DB_HOST` -> used as `DATASTORE_HOST`
+    - `DB_PORT` -> used as `DATASTORE_PORT`
+    - `DB_NAME` -> used as `DATASTORE_NAME`
+  - **Used by**: Deployment and Job/carbide-api-migrate
+  - **Purpose**: Central configuration for database endpoint information
+- **ConfigMap/carbide-api-config-files**
+  - **Generated from**:
+    - `config-files/carbide-api-config.toml`
+    - `config-files/casbin-policy.csv`
+  - **Used by**: Deployment (mounted at `/etc/forge/carbide-api`)
+- **ConfigMap/carbide-api-site-config-files**
+  - **Generated with files**: `[]` in base; overlays should add site-specific files
+  - **Used by**: Deployment (mounted at `/etc/forge/carbide-api/site`)
 
 #### Carbide DHCP
 
-Path in carbide repo: `deploy/carbide-base/dhcp`
+The `deploy/carbide-base/dhcp` path contains Kubernetes manifests for the carbide-dhcp service and all its configuration surfaces: environment variables, secrets, config maps, TLS certificates, RBAC, and a specification for how the components fit together at runtime.
 
-```
-deploy/carbide-base/dhcp/
-  certificate.yaml
-  deployment.yaml
-  kustomization.yaml
-  metrics-service.yaml
-  role.yaml
-  rolebinding.yaml
-  service-account.yaml
-  service.yaml
+```bash
+dhcp/
+├── certificate.yaml
+├── deployment.yaml
+├── kustomization.yaml
+├── metrics-service.yaml
+├── role.yaml
+├── rolebinding.yaml
+├── service-account.yaml
+└── service.yaml
 ```
 
 carbide-dhcp is a DHCP service (using Kea DHCPv4) that integrates with Forge via mTLS SPIFFE
-certificates.
+certificates. It exposes the following:
 
--   DHCP traffic on **UDP port 67**
--   Metrics on **TCP port 1089**
+- DHCP traffic on **UDP port 67**
+- Metrics on **TCP port 1089**
 
-**External dependencies you must provide:**
+**Primary resources**
 
--   `ConfigMap/carbide-dhcp-config` — Kea DHCP configuration (must include `kea_config.json`;
-    mounted at `/tmp`)
+- **Workload**: `Deployment/carbide-dhcp`
+- **Networking**:
+  - `Service/carbide-dhcp` (DHCP UDP 67)
+  - `Service/carbide-dhcp-metrics` (HTTP metrics on 1089)
+- **Identity / TLS**:
+  - `Certificate/carbide-dhcp-certificate` -> `Secret/carbide-dhcp-certificate`
+- **Config**:
+  - `External ConfigMap/carbide-dhcp-config` (Kea config JSON)
+- **RBAC**:
+  - `ServiceAccount/carbide-dhcp`
+  - `Role/carbide-dhcp`
+  - `RoleBinding/carbide-dhcp`
+- **Kustomize wiring**: `kustomization.yaml`
 
-**Environment variables:**
+**External dependencies you must provide**
 
-| Variable | Value | Purpose |
-| --- | --- | --- |
-| `FORGE_ROOT_CAFILE_PATH` | `/var/run/secrets/spiffe.io/ca.crt` | CA for validating Forge TLS endpoints |
-| `FORGE_CLIENT_CERT_PATH` | `/var/run/secrets/spiffe.io/tls.crt` | Client cert for authenticating to carbide-api |
-| `FORGE_CLIENT_KEY_PATH` | `/var/run/secrets/spiffe.io/tls.key` | Private key for client cert |
+- `ConfigMap/carbide-dhcp-config` (Kea DHCP config, including `kea_config.json` key or similar)
+- `ClusterIssuer/vault-forge-issuer` (for cert-manager)
+- `cert-manager` itself (to reconcile Certificate into Secret)
 
-**TLS Certificate:** `Certificate/carbide-dhcp-certificate` (SPIFFE URI:
-`spiffe://forge.local/forge-system/sa/carbide-dhcp`)
+#### Kustomization Entrypoint (kustomization.yaml)
+
+The `kustomization.yaml` file is the entrypoint that connects all the carbide-dhcp manifests together and applies common labels so everything is consistently addressable.
+
+**Labels**
+
+The following add labels to resources, selectors, and templates:
+
+- `app.kubernetes.io/name: carbide-dhcp`
+- `app.kubernetes.io/component: dhcp`
+
+Both `includeSelectors: true` and `includeTemplates: true` are set, so these labels propagate to the following:
+
+- Pod templates
+- Service selectors (if present)
+- Other labeled fields
+
+**Resources Included**
+
+The following resources are included in the kustomization:
+
+- `certificate.yaml`
+- `deployment.yaml`
+- `metrics-service.yaml`
+- `role.yaml`
+- `rolebinding.yaml`
+- `service-account.yaml`
+- `service.yaml`
+
+**Note**: The `carbide-dhcp-config` config map should be defined elsewhere (e.g. an overlay or another base).
+For instance, for SA-Enablement, it is defined under `deploy/kustomization.yaml` in the BMM repo.
+
+#### Deployment (deployment.yaml)
+
+##### Basic Spec
+
+- **Kind**: Deployment
+- **Name**: `carbide-dhcp`
+- **Namespace**: `forge-system`
+- **Spec**:
+  - **replicas**: 1
+  - **strategy.type**: RollingUpdate
+  - **selector.matchLabels**: `app.kubernetes.io/name: carbide-dhcp`
+
+**Container**
+
+- **Name**: `carbide-dhcp`
+- **Image**: `nvcr.io/nvidian/nvforge/nvmetal-carbide:latest` (This is typically overridden with a pinned version in an overlay.)
+- **ImagePullPolicy**: `IfNotPresent`
+- **Command**:
+  ```bash
+  sh -c 'mkdir -vp /var/run/kea /var/lib/kea && /sbin/kea-dhcp4 -c /tmp/kea_config.json'
+  ```
+  - The following runtime directories are created for Kea:
+    - `/var/run/kea`
+    - `/var/lib/kea`
+  - Kea DHCPv4 is started:
+    - Binary: `/sbin/kea-dhcp4`
+    - Config file: `/tmp/kea_config.json` (This file must be provided by the `carbide-dhcp-config` ConfigMap mounted at `/tmp`.)
+
+**Ports**
+
+- **udp**: containerPort: 67
+- **metrics**: containerPort: 1089
+
+**Security context**
+
+- `capabilities.add: [ "SYS_PTRACE" ]` (Allows debugging (e.g., gdb/strace) inside the container.)
+
+##### Volume mounts
+
+The following is mounted inside the container:
+
+- **SPIFFE certs**:
+  - `name: spiffe`
+  - `mountPath: /var/run/secrets/spiffe.io`
+  - `readOnly: true`
+- **Used by env vars**:
+  - `FORGE_ROOT_CAFILE_PATH = /var/run/secrets/spiffe.io/ca.crt`
+  - `FORGE_CLIENT_CERT_PATH = /var/run/secrets/spiffe.io/tls.crt`
+  - `FORGE_CLIENT_KEY_PATH = /var/run/secrets/spiffe.io/tls.key`
+- **Config**:
+  - `name: config`
+  - `mountPath: /tmp`
+- The carbide-dhcp-config ConfigMap is mounted here. It must include the Kea config file as `/tmp/kea_config.json`.
+
+##### Volumes
+- **SPIFFE**:
+  - **Type**: Secret
+  - **secret.secretName**: `carbide-dhcp-certificate`
+  - **Contents**: TLS keypair and CA roots created by cert-manager from the Certificate resource
+- **Config**:
+  - **Type**: ConfigMap
+  - **configMap.name**: `carbide-dhcp-config`
+  - **defaultMode**: 420 (octal 0644)
+
+##### Environment Variables
+
+- `FORGE_ROOT_CAFILE_PATH`
+  - **Value**: `/var/run/secrets/spiffe.io/ca.crt`
+  - **Purpose**: Path to CA certificate used to validate Forge/peer TLS endpoints
+- `FORGE_CLIENT_CERT_PATH`
+  - **Value**: `/var/run/secrets/spiffe.io/tls.crt`
+  - **Purpose**: Client certificate used by DHCP component to authenticate as carbide-dhcp to Forge or other services
+- `FORGE_CLIENT_KEY_PATH`
+  - **Value**: `/var/run/secrets/spiffe.io/tls.key`
+  - **Purpose**: Private key corresponding to `FORGE_CLIENT_CERT_PATH`
+- `RUST_BACKTRACE`
+  - **Value**: `"full"`
+  - **Purpose**: Produces full stack traces when Rust code panics inside the image.
+- `RUST_LIB_BACKTRACE`
+  - **Value**: `"0"`
+  - **Purpose**: Controls backtrace behavior for Rust libraries (per Rust standard library docs).
+
+Customize enviornment variables as follows:
+
+- For different cert paths or mounting locations: Adjust the volume mount path and update these env vars accordingly.
+- For debugging:
+  - Set `RUST_BACKTRACE` to `1` or `full` (already full).
+  - Adjust `RUST_LIB_BACKTRACE` to enable library backtraces if needed.
 
 #### Carbide DNS
 
-Path in carbide repo: `deploy/carbide-base/dns`
+The Kubernetes manifests for the carbide-dns service and all its configurations are located in the `deploy/carbide-base/dns` directory, which has the following structure:
 
 ```
 deploy/carbide-base/dns/
