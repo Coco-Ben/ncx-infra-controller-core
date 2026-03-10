@@ -166,23 +166,69 @@ Vault AppRole credentials for automated secret access by Carbide services.
 
 **Required keys:** `VAULT_ROLE_ID`, `VAULT_SECRET_ID`
 
+To obtain these values, enable AppRole auth in Vault and create a role for Carbide:
+
+```bash
+vault auth enable approle
+
+vault write auth/approle/role/carbide \
+  token_policies="forge-pki-policy,forge-kv-policy" \
+  token_ttl=1h \
+  token_max_ttl=4h \
+  secret_id_ttl=0
+```
+
+Then read the role ID and generate a secret ID:
+
+```bash
+vault read -field=role_id auth/approle/role/carbide/role-id
+vault write -field=secret_id -f auth/approle/role/carbide/secret-id
+```
+
+Create the Kubernetes secret with the values returned above:
+
 ```bash
 kubectl create secret generic carbide-vault-approle-tokens \
   --namespace forge-system \
-  --from-literal=VAULT_ROLE_ID='<role-id>' \
-  --from-literal=VAULT_SECRET_ID='<secret-id>'
+  --from-literal=VAULT_ROLE_ID='<role-id-from-above>' \
+  --from-literal=VAULT_SECRET_ID='<secret-id-from-above>'
 ```
 
 ### `carbide-vault-token`
 
-Vault token for direct API access.
+Vault token for direct API access. This token is used by Carbide services that
+authenticate to Vault directly rather than via AppRole.
 
 **Required keys:** `VAULT_TOKEN`
+
+Generate a token with the policies Carbide needs:
+
+```bash
+vault token create \
+  -policy=forge-pki-policy \
+  -policy=forge-kv-policy \
+  -ttl=768h \
+  -display-name=carbide-api
+```
+
+The `token` field in the output is your `VAULT_TOKEN`. Create the Kubernetes secret:
 
 ```bash
 kubectl create secret generic carbide-vault-token \
   --namespace forge-system \
-  --from-literal=VAULT_TOKEN='<vault-token>'
+  --from-literal=VAULT_TOKEN='<token-from-above>'
+```
+
+**Note:** The policies referenced above (`forge-pki-policy`, `forge-kv-policy`) must
+be created first. See the [Vault section](#hashicorp-vault) above for the PKI policy.
+For the KV policy:
+
+```bash
+vault policy write forge-kv-policy - <<EOF
+path "secrets/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+EOF
 ```
 
 ### `ssh-host-key` (for carbide-ssh-console-rs)
