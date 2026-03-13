@@ -1519,7 +1519,7 @@ These variables are shared between the deployment and the migration job.
   - **Purpose**: Key for encrypting cookie jar data
   - **Note**: In a hardened environment, you may want to use a dedicated secret instead of reusing the database password.
 
-The following enviornment variables are commented out because they are placeholders for SSO integration:
+The following enviornment variables are commented out because they are placeholders for single sign-on (SSO) integration:
 
 - `CARBIDE_WEB_OAUTH2_CLIENT_SECRET`: This value would come from `Secret/azure-sso-carbide-web-client-secret`, key `client_secret`.
 - `CARBIDE_WEB_HOSTNAME`: This value would come from `ConfigMap/carbide-web-api-hostname`, key `hostname`.
@@ -1529,7 +1529,7 @@ The following enviornment variables are commented out because they are placehold
 
 - `BITNAMI_DEBUG`:
   - **Value**: "false"
-  - **Purpose**: Standard debug toggle for Bitnami images; likely unused but set to false.
+  - **Purpose**: Standard debug toggle for Bitnami images. This is unlikely to be used but set to false.
 - `RUST_BACKTRACE`:
   - **Value**: "full"
   - **Purpose**: Enables full Rust stack traces on panic.
@@ -1539,7 +1539,7 @@ The following enviornment variables are commented out because they are placehold
 
 #### Migration Job (migration.yaml)
 
-This file runs database migrations for the carbide-api database before applying other changes.
+This file confiugres database migrations for the carbide-api database before applying other changes.
 
 - **Kind**: Job
 - **Name**: carbide-api-migrate
@@ -1559,7 +1559,7 @@ This file runs database migrations for the carbide-api database before applying 
 
 **Configuration impact**
 
-Any changes to DB host, port, name, user, or password must be reflected in the following:
+Any changes to DB host, port, name, user, or password must be reflected in the following v:
 - `Secret/forge-system.carbide.forge-pg-cluster.credentials`
 - `ConfigMap/forge-system-carbide-database-config`
 
@@ -1621,7 +1621,7 @@ Requests a TLS certificate via cert-manager for the carbide-api service; this is
     - `carbide-api.default.svc.cluster.local`
   - **uris**:
     - `spiffe://forge.local/default/sa/carbide-api`
-    - **Note**: SPIFFE trust domain "forge.local" is currently hard-coded; it should be updated if your environment uses a different domain.
+    - **Note**: The SPIFFE trust domain "forge.local" is currently hard-coded; update this domain if your environment uses a different domain.
   - **privateKey**:
       - **algorithm**: ECDSA
       - **size**: 384
@@ -1637,7 +1637,7 @@ Requests a TLS certificate via cert-manager for the carbide-api service; this is
 - **Secret name**: `carbide-api-certificate`
 - **Used by**:
   - Deployment volume `spiffe`, mounted at `/var/run/secrets/spiffe.io`.
-  - `carbide-api-config.toml` TLS section expects:
+  - The TLS section in `carbide-api-config.toml` expects the following:
     - `/var/run/secrets/spiffe.io/tls.crt`
     - `/var/run/secrets/spiffe.io/tls.key`
     - `/var/run/secrets/spiffe.io/ca.crt`
@@ -1678,10 +1678,9 @@ This allows the service (via cert-manager flows) to create CertificateRequest re
 
 This binds the local Role to the carbide-api service account.
 
-
 #### Carbide API Configuration and Dependency Matrix
 
-This section summarizes what you must provide and how it is used.
+This section summarizes the secrets and configmaps you must provide and how they are used.
 
 ##### Secrets
 
@@ -1689,7 +1688,7 @@ This section summarizes what you must provide and how it is used.
   - **Keys**:
     - **token**: Vault token value
   - **Used by**:  Deployment (env `VAULT_TOKEN`).
-  - **Purpose**: uthenticate carbide-api to Vault if not using AppRole.
+  - **Purpose**: Authenticate carbide-api to Vault if not using AppRole.
 - **Secret/carbide-vault-approle-tokens** (optional)
   - **Keys**:
     - `VAULT_ROLE_ID`
@@ -1722,16 +1721,16 @@ This section summarizes what you must provide and how it is used.
 
 - **ConfigMap/vault-cluster-info**
   - **Required keys**:
-    - `VAULT_SERVICE` -> used as `VAULT_ADDR`
-    - `FORGE_VAULT_MOUNT` -> used as `VAULT_MOUNT_LOCATION`, `VAULT_KV_MOUNT_LOCATION`
-    - `FORGE_VAULT_PKI_MOUNT` -> used as `VAULT_PKI_MOUNT_LOCATION`
+    - `VAULT_SERVICE`: Used as `VAULT_ADDR`
+    - `FORGE_VAULT_MOUNT`: Used as `VAULT_MOUNT_LOCATION`, `VAULT_KV_MOUNT_LOCATION`
+    - `FORGE_VAULT_PKI_MOUNT`: Used as `VAULT_PKI_MOUNT_LOCATION`
   - **Used by**: Deployment env vars
   - **Purpose**: Central configuration for Vault endpoints and mount paths
 - **ConfigMap/forge-system-carbide-database-config**
   - **Required keys**:
-    - `DB_HOST` -> used as `DATASTORE_HOST`
-    - `DB_PORT` -> used as `DATASTORE_PORT`
-    - `DB_NAME` -> used as `DATASTORE_NAME`
+    - `DB_HOST`: Used as `DATASTORE_HOST`
+    - `DB_PORT`: Used as `DATASTORE_PORT`
+    - `DB_NAME`: Used as `DATASTORE_NAME`
   - **Used by**: Deployment and Job/carbide-api-migrate
   - **Purpose**: Central configuration for database endpoint information
 - **ConfigMap/carbide-api-config-files**
@@ -1759,8 +1758,8 @@ dhcp/
 └── service.yaml
 ```
 
-carbide-dhcp is a DHCP service (using Kea DHCPv4) that integrates with Forge via mTLS SPIFFE
-certificates. It exposes the following:
+The `carbide-dhcp` service uses Kea DHCPv4 to integrate with NICo via mTLS SPIFFE
+certificates. It exposes the following ports:
 
 - DHCP traffic on **UDP port 67**
 - Metrics on **TCP port 1089**
@@ -1783,13 +1782,13 @@ certificates. It exposes the following:
 
 **External dependencies you must provide**
 
-- `ConfigMap/carbide-dhcp-config` (Kea DHCP config, including `kea_config.json` key or similar)
-- `ClusterIssuer/vault-forge-issuer` (for cert-manager)
-- `cert-manager` itself (to reconcile Certificate into Secret)
+- `ConfigMap/carbide-dhcp-config`: The Kea DHCP config file, including the `kea_config.json` key or similar
+- `ClusterIssuer/vault-forge-issuer`: A trusted issuer for cert-manager
+- `cert-manager`: Reconciles Certificate into Secret
 
 #### Kustomization Entrypoint (kustomization.yaml)
 
-The `kustomization.yaml` file is the entrypoint that connects all the carbide-dhcp manifests together and applies common labels so everything is consistently addressable.
+The `kustomization.yaml` file is the entrypoint that connects all the carbide-dhcp manifests together and applies common labels to ensure everything is consistently addressable.
 
 **Labels**
 
@@ -1923,10 +1922,9 @@ deploy/carbide-base/dns/
   statefulset.yaml
 ```
 
-carbide-dns handles DNS queries from site-controller services and managed hosts and is authoritative
-for them. It works in tandem with the Unbound recursive resolver.
+The carbide-dns service handles DNS (domain name service) queries from the site-controller services and managed hosts and is authoritative for them. It works in tandem with the unbound off-the-shelf DNS service for hosts outside of a BMM installation.
 
--   DNS on **UDP/TCP port 53**
+The DNS service runs on **UDP/TCP port 53**.
 
 **External dependencies you must provide:**
 
@@ -1945,7 +1943,7 @@ for them. It works in tandem with the Unbound recursive resolver.
 
 #### Carbide Hardware Health
 
-Path in carbide repo: `deploy/carbide-base/hardware-health`
+The carbide-hardware-health service is located in the `deploy/carbide-base/hardware-health` directory. It has the following structure:
 
 ```
 deploy/carbide-base/hardware-health/
@@ -1958,15 +1956,15 @@ deploy/carbide-base/hardware-health/
   service.yaml
 ```
 
-carbide-hardware-health scrapes all host and DPU BMCs for system health information (fan speeds,
-temperatures, leak indicators). Measurements are emitted as Prometheus metrics on port **9009** at
+carbide-hardware-health scrapes all host and DPU BMCs for system health information (including fan speeds,
+temperatures, and leak indicators). Measurements are emitted as Prometheus metrics on port **9009** at
 `/metrics`. The service also calls the Carbide API to set health alerts.
 
 **TLS Certificate:** `Certificate/carbide-hardware-health-certificate`
 
 #### Nginx
 
-Path in carbide repo: `deploy/carbide-base/nginx`
+The Nginx service is located in the `deploy/carbide-base/nginx` directory. It has the following structure:
 
 ```
 deploy/carbide-base/nginx/
@@ -1982,7 +1980,7 @@ deploy/carbide-base/nginx/
 Nginx serves boot artifacts to managed hosts and DPUs when they network boot using iPXE. It works
 in tandem with the carbide-pxe service.
 
--   HTTP on **TCP port 80**
+HTTP traffic is served on **TCP port 80**.
 
 A `ConfigMap/nginx-config` is generated from `files/nginx.conf`.
 
@@ -1990,7 +1988,7 @@ A `ConfigMap/nginx-config` is generated from `files/nginx.conf`.
 
 #### Carbide NTP
 
-Path in carbide repo: `deploy/carbide-base/ntp`
+The carbide-ntp service is located in the `deploy/carbide-base/ntp` directory. It has the following structure:
 
 ```
 deploy/carbide-base/ntp/
@@ -1999,22 +1997,22 @@ deploy/carbide-base/ntp/
   statefulset.yaml
 ```
 
-carbide-ntp handles NTP queries from site-controller services and managed hosts. Uses the
+carbide-ntp handles NTP queries from site-controller services and managed hosts. It uses the
 `dockurr/chrony` image (pin to a specific tag in your overlay).
 
--   NTP on **UDP port 123**
--   Pod anti-affinity ensures replicas are spread across Kubernetes nodes
+- The NTP service runs on **UDP port 123**.
+- Pod anti-affinity ensures replicas are spread across Kubernetes nodes
 
 **Environment variables:**
 
 | Variable | Purpose |
 | --- | --- |
-| `NTP_SERVERS` | List of upstream NTP servers (local or public, must be network-accessible) |
+| `NTP_SERVERS` | List of upstream NTP servers (local or public; must be network-accessible) |
 | `NTP_DIRECTIVES` | Additional Chrony configuration directives |
 
 #### Carbide PXE
 
-Path in carbide repo: `deploy/carbide-base/pxe`
+The carbide-pxe service is located in the `deploy/carbide-base/pxe` directory. It has the following structure:
 
 ```
 deploy/carbide-base/pxe/
@@ -2028,15 +2026,15 @@ deploy/carbide-base/pxe/
   service.yaml
 ```
 
-carbide-pxe provides boot artifacts (iPXE scripts, user-data, OS images) to managed hosts over
-HTTP. It determines which OS data to serve for each host by requesting data from Carbide core, and
+The carbide-pxe service provides boot artifacts (e.g. iPXE scripts, user-data, OS images) to managed hosts over
+HTTP. It determines which OS data to serve for each host by requesting data from Carbide core and
 works in tandem with Nginx.
 
--   HTTP on **TCP port 8080**
+HTTP traffic is served on **TCP port 8080**.
 
 **External dependencies you must provide:**
 
--   `ConfigMap/carbide-pxe-env-config` — environment variables for the PXE service
+- `ConfigMap/carbide-pxe-env-config`: Environment variables for the PXE service
 
 **Environment variables:**
 
