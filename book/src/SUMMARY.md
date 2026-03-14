@@ -25,7 +25,7 @@
 
 - [Site Setup](manuals/site-setup.md)
     - [Site Reference Architecture](manuals/site-reference-arch.md)
-- [Building BMM Containers](manuals/building_bmm_containers.md)
+- [Building NICo Containers](manuals/building_nico_containers.md)
 - [Ingesting Hosts](manuals/ingesting_machines.md)
 - [Removing Hosts](manuals/removing_machines.md)
 - [Updating Expected Hosts Manifest](manuals/expected_machine_update.md)

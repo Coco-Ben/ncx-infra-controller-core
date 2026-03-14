@@ -1,6 +1,6 @@
 # Development
 
-NVIDIA Bare Metal Manager (BMM) uses docker-compose to instantiate a development
+NVIDIA NCX Infra Controller (NICo) uses docker-compose to instantiate a development
 environment.
 
 ## Local environment prep
@@ -181,7 +181,7 @@ Cleanup, otherwise docker-compose won't work later:
 
 ## IDE
 
-Recommended IDE for Rust development in the BMM project is CLion, IntelliJ works as well but includes a lot of extra components that you don't need. There are plenty
+Recommended IDE for Rust development in the NICo project is CLion, IntelliJ works as well but includes a lot of extra components that you don't need. There are plenty
 of options (VS Code, NeoVim etc), but CLion/IntelliJ is widely used.
 
 One thing to note regardless of what IDE you choose: if you're running on Linux DO NOT USE Snap or Flatpak versions of the software packages. These builds introduce a number

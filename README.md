@@ -1,6 +1,6 @@
-# NVIDIA Bare Metal Manager - Bare Metal Provisioning
+# NVIDIA NCX Infra Controller
 
-NVIDIA Bare Metal Manager delivers zero-touch lifecycle automation for bare-metal
+NVIDIA NCX Infra Controller (NICo) delivers zero-touch lifecycle automation for bare-metal
 systems that secures datacenter infrastructure at its foundation.
 
 It is an API-based microservice that provides site-local, zero-trust,
@@ -10,9 +10,9 @@ building next generation AI Cloud offerings.
 
 ## Getting Started
 
-- Go to the [NVIDIA Bare Metal Manager overview](book/src/README.md) to get an overview of NVIDIA Bare Metal Manager architecture and capabilities.
+- Go to the [NVIDIA NCX Infra Controller overview](book/src/README.md) to get an overview of NVIDIA Bare Metal Manager architecture and capabilities.
 - Or jump to the [Site Setup guide](book/src/manuals/site-setup.md) to start setting up your site for NVIDIA Bare Metal Manager.
-- Or jump to the [Building Containers guide](book/src/manuals/building_bmm_containers.md) to see an overview for building the containers.
+- Or jump to the [Building Containers guide](book/src/manuals/building_nico_containers.md) to see an overview for building the containers.
 
 ## Experimental Notice
 
