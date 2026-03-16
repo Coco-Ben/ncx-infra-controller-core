@@ -1,4 +1,4 @@
-# NVIDIA Bare Metal Manager
+# NCX Infra Controller
 
 - [Introduction](README.md)
 - [Hardware Compatbility List](hcl.md)
@@ -66,7 +66,7 @@
 
 # Playbooks
 
-- [Azure OIDC for NVIDIA Bare Metal Manager-Web UI](playbooks/carbide_web_oauth2.md)
+- [Azure OIDC for NCX Infra Controller-Web UI](playbooks/carbide_web_oauth2.md)
 - [Force deleting and rebuilding Forge hosts](playbooks/force_delete.md)
 - [Rebooting a machine](playbooks/machine_reboot.md)
 - [Instance/Subnet/etc is stuck in a state]()

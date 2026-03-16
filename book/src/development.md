@@ -76,7 +76,7 @@ environment.
 8. Install `direnv` using your package manager
 
    It would be best to install `direnv` on your host. `direnv` requires a shell hook to work.  See `man direnv` (after install) for
-   more information on setting it up. Once you clone the `bare-metal-manager-core` repo, you need to run `direnv allow` the first time you cd into your local copy.
+   more information on setting it up. Once you clone the `ncx-infra-controller-core` repo, you need to run `direnv allow` the first time you cd into your local copy.
    Running `direnv allow` exports the necessary environmental variables while in the repo and cleans up when not in the repo.
 
    There are preset environment variables that are used throughout the repo. `${REPO_ROOT}` represents the top of the forge repo tree.
