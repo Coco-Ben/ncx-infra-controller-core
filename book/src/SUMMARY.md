@@ -34,6 +34,7 @@
 - [Updating Hosts](manuals/machine_updates.md)
 - [Host Validation](manuals/machine_validation.md)
 - [SKU Validation](manuals/sku_validation.md)
+- [Rack-Level Administration](manuals/rack_level_admin.md)
 - [NVLink Partitioning](manuals/nvlink_partitioning.md)
 - [Release Instance API Enhancements](manuals/breakfix_integration.md)
 - [Managing VPC Peering](manuals/vpc_peering_management.md)
