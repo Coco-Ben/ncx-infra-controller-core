@@ -360,13 +360,10 @@ kubectl wait --for=condition=Ready certificate/core-grpc-client-site-agent-certs
 SITE_UUID=<your-site-uuid>
 
 kubectl exec -n temporal deploy/temporal-admintools -- \
-  temporal operator namespace create --namespace "$SITE_UUID" \
-    --address temporal-frontend.temporal:7233 \
-    --tls-cert-path /var/secrets/temporal/certs/server-interservice/tls.crt \
-    --tls-key-path /var/secrets/temporal/certs/server-interservice/tls.key \
-    --tls-ca-path /var/secrets/temporal/certs/server-interservice/ca.crt \
-    --tls-server-name interservice.server.temporal.local
+  temporal operator namespace create "$SITE_UUID" --address temporal-frontend.temporal:7233
 ```
+
+If your Temporal deployment uses mTLS, add the TLS flags as described in Step 4.4.
 
 3. Install the site-agent Helm chart (the pre-install hook registers the site
    and creates the `site-registration` secret):
