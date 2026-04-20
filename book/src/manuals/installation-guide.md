@@ -300,14 +300,14 @@ kustomize build . --enable-helm --enable-alpha-plugins --enable-exec | kubectl a
 ### Verify the API
 
 ```bash
-curl -k https://<CARBIDE_API_EXTERNAL_IP>:1079/healthz
+curl -k https://<CARBIDE_API_EXTERNAL_IP>:1079/
 ```
 
 If the API VIP is not externally reachable:
 
 ```bash
 kubectl port-forward svc/carbide-api 1079:1079 -n forge-system
-curl -k https://localhost:1079/healthz
+curl -k https://localhost:1079/
 ```
 
 ---
@@ -428,7 +428,7 @@ Once hosts are `Available`, verify the full deployment:
 kubectl -n forge-system get pods
 
 # API healthy
-curl -k https://<CARBIDE_API_EXTERNAL_IP>:1079/healthz
+curl -k https://<CARBIDE_API_EXTERNAL_IP>:1079/
 
 # Machines discovered and available
 carbide-admin-cli -c <api-url> machine list

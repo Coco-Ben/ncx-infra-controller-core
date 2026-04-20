@@ -220,12 +220,21 @@ The `token` field in the output is your `VAULT_TOKEN`. Create the Kubernetes sec
 ```bash
 kubectl create secret generic carbide-vault-token \
   --namespace forge-system \
-  --from-literal=VAULT_TOKEN='<token-from-above>'
+  --from-literal=token='<token-from-above>'
 ```
 
 **Note:** The policies referenced above (`forge-pki-policy`, `forge-kv-policy`) must
 be created first. See the [Vault section](#hashicorp-vault) above for the PKI policy.
 For the KV policy:
+
+Enable the KV v2 secrets engine at the `secrets` mount path (must match
+`FORGE_VAULT_MOUNT` in the `vault-cluster-info` ConfigMap):
+
+```bash
+vault secrets enable -version=2 -path=secrets kv
+```
+
+Then create the policy:
 
 ```bash
 vault policy write forge-kv-policy - <<EOF
@@ -245,7 +254,8 @@ SSH host key used by the console proxy service. This key must be generated ahead
 ssh-keygen -t ed25519 -f /tmp/ssh_host_ed25519_key -N ""
 kubectl create secret generic ssh-host-key \
   --namespace forge-system \
-  --from-file=ssh_host_ed25519_key=/tmp/ssh_host_ed25519_key
+  --from-file=ssh_host_ed25519_key=/tmp/ssh_host_ed25519_key \
+  --from-file=ssh_host_ed25519_key_pub=/tmp/ssh_host_ed25519_key.pub
 ```
 
 ### `azure-sso-carbide-web-client-secret` (Optional -- only if using OAuth2)
