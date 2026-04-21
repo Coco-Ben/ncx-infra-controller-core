@@ -61,7 +61,7 @@ for image in carbide-rest-api carbide-rest-workflow carbide-rest-site-manager \
 done
 ```
 
-See the [ncx-infra-controller-rest README](https://github.com/NVIDIA/ncx-infra-controller-rest#building-docker-images)
+Refer to the [ncx-infra-controller-rest README](https://github.com/NVIDIA/ncx-infra-controller-rest#building-docker-images)
 for the full list of images and build options.
 
 ---
@@ -70,7 +70,7 @@ for the full list of images and build options.
 
 Customers are expected to provision their own site controller OS and Kubernetes cluster.
 
-See the [Site Reference Architecture](site-reference-arch.md) for hardware requirements,
+Refer to the [Site Reference Architecture](site-reference-arch.md) for hardware requirements,
 Kubernetes versions, networking best practices, and IP pool sizing.
 
 In summary, you need:
@@ -88,10 +88,10 @@ In summary, you need:
 Deploy the following services before any Carbide components. The order within this
 step matters.
 
-**For baselines and versions**, see [Site Setup](site-setup.md).
+**For baselines and versions**, refer to the [Site Setup](site-setup.md) section.
 
-**For the Secrets, ConfigMaps, and ClusterIssuer** that the Helm chart expects, see
-[helm/PREREQUISITES.md](../../helm/PREREQUISITES.md) -- it provides `kubectl create`
+**For the Secrets, ConfigMaps, and ClusterIssuer** that the Helm chart expects, refer to
+the [helm/PREREQUISITES.md](../../helm/PREREQUISITES.md) file -- it provides `kubectl create`
 commands for every required resource.
 
 Deploy in this order:
@@ -199,7 +199,7 @@ kubectl exec -n temporal deploy/temporal-admintools -- \
 
 If your Temporal deployment uses mTLS, add the TLS flags to each command:
 `--tls-cert-path`, `--tls-key-path`, `--tls-ca-path`, `--tls-server-name`.
-See `helm-prereqs/SETUP_PHASES.md` for the full mTLS example.
+Refer to `helm-prereqs/SETUP_PHASES.md` for the full mTLS example.
 
 ```{note}
 If Temporal pods are stuck in `Init:0/1`, the Elasticsearch index may not be ready.
@@ -258,7 +258,7 @@ There are two deployment methods: **Helm** (recommended) and **Kustomize** (lega
 
 ### Helm (Recommended)
 
-See the [Helm chart README](../../helm/README.md) for full documentation and
+Refer to the [Helm chart README](../../helm/README.md) for full documentation and
 [helm/PREREQUISITES.md](../../helm/PREREQUISITES.md) for the Secrets and ConfigMaps
 that must exist before install.
 
@@ -289,7 +289,7 @@ The migration job runs automatically. Pods may briefly restart until the databas
 
 ### Kustomize (Alternative)
 
-See [deploy/README.md](../../deploy/README.md) for the full list of inputs.
+Refer to [deploy/README.md](../../deploy/README.md) for the full list of inputs.
 Populate `deploy/kustomization.yaml` and `deploy/files/`, then:
 
 ```bash
@@ -390,7 +390,7 @@ kubectl logs -n carbide-rest -l app.kubernetes.io/name=carbide-rest-site-agent -
 
 ## 9. Ingest Hosts
 
-See [Ingesting Hosts](ingesting_machines.md) for the complete procedure.
+Refer to [Ingesting Hosts](ingesting_machines.md) for the complete procedure.
 
 For each managed host, you need the **BMC MAC address**, **chassis serial number**, and
 **factory BMC username/password** (from your asset management system or server vendor).
