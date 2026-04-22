@@ -378,6 +378,7 @@ impl TestEnv {
             site_config: self.config.clone(),
             dpa_info: None,
             rms_client: self.rms_sim.as_rms_client(),
+            switch_system_image_rms_client: self.rms_sim.as_switch_system_image_rms_client(),
             credential_manager: self.test_credential_manager.clone(),
         }
     }
@@ -1572,6 +1573,7 @@ pub async fn create_test_env_with_overrides(
         site_config: config.clone(),
         dpa_info: None,
         rms_client: rms_sim.as_rms_client(),
+        switch_system_image_rms_client: rms_sim.as_switch_system_image_rms_client(),
         credential_manager: credential_manager.clone(),
     });
 
