@@ -19,6 +19,6 @@ jobs:
         with:
           update_from_source: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: 'update-api'
+          branch: 'fern/update-api'
           auto_merge: false
           add_timestamp: true
