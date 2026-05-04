@@ -32,7 +32,7 @@ use rpc::forge::{
     RemoveMachineHealthReportRequest, RemoveRackHealthReportRequest,
 };
 
-use super::filters;
+use super::{Base, filters};
 use crate::api::Api;
 use crate::auth::AuthContext;
 
@@ -644,3 +644,5 @@ pub(super) async fn fetch_health_history(
 
     Ok(records)
 }
+
+impl super::Base for HealthPage {}
