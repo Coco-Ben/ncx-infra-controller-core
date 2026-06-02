@@ -34,6 +34,7 @@ use carbide_network::ip::prefix::Ipv4Net;
 use carbide_network::virtualization::{VpcVirtualizationType, build_dual_stack_list};
 use eyre::WrapErr;
 use mac_address::MacAddress;
+use nvue_client::client::NvueClientError;
 use nvue_client::{NvueClient, NvueConfig};
 use serde::Deserialize;
 use tokio::process::Command as TokioCommand;
@@ -145,8 +146,105 @@ struct PostAction {
 }
 
 pub enum NvueUpdateFlavor<'a> {
-    StartupFile { hbn_root: &'a Path, skip_post: bool },
-    RestApi { nvue_client: &'a NvueClient },
+    StartupFile {
+        hbn_root: &'a Path,
+        skip_post: bool,
+    },
+    RestApi {
+        nvue_context: &'a mut NvueClientContext,
+    },
+}
+
+/// The NVUE client and other information associated with it.
+pub struct NvueClientContext {
+    pub nvue_client: NvueClient,
+    pub last_applied_hash: Option<u64>,
+}
+
+impl NvueClientContext {
+    pub fn new(nvue_client: NvueClient) -> Self {
+        let last_applied_hash = None;
+        Self {
+            nvue_client,
+            last_applied_hash,
+        }
+    }
+
+    // Wrap the inner nvue_client's `push_config()` and try to avoid re-applying
+    // a configuration we're already using. Returns Ok(Some(revision_id)) on
+    // a change, Ok(None) if the config was unchanged, and otherwise passes
+    // through errors from the inner client.
+    pub async fn update_config(
+        &mut self,
+        config: &NvueConfig,
+    ) -> Result<Option<String>, NvueClientError> {
+        let new_hash = config.u64_hash();
+
+        if let Some(last_applied_hash) = self.last_applied_hash
+            && new_hash == last_applied_hash
+        {
+            Ok(None)
+        } else {
+            self.nvue_client
+                .push_config(config)
+                .await
+                .map(|revision_id| {
+                    self.last_applied_hash.replace(new_hash);
+                    Some(revision_id)
+                })
+        }
+    }
+}
+
+/// Converts an RPC routing profile into the NVUE renderer model.
+impl From<&rpc::RoutingProfile> for nvue::RoutingProfile {
+    fn from(profile: &rpc::RoutingProfile) -> Self {
+        // Preserve the API-provided routing policy without applying template concerns here.
+        nvue::RoutingProfile {
+            leak_default_route_from_underlay: profile.leak_default_route_from_underlay,
+            leak_tenant_host_routes_to_underlay: profile.leak_tenant_host_routes_to_underlay,
+            tenant_leak_communities_accepted: profile.tenant_leak_communities_accepted,
+            route_target_imports: profile
+                .route_target_imports
+                .iter()
+                .map(|rt| nvue::RouteTargetConfig {
+                    asn: rt.asn,
+                    vni: rt.vni,
+                })
+                .collect(),
+            route_targets_on_exports: profile
+                .route_targets_on_exports
+                .iter()
+                .map(|rt| nvue::RouteTargetConfig {
+                    asn: rt.asn,
+                    vni: rt.vni,
+                })
+                .collect(),
+            accepted_leaks_from_underlay: profile
+                .accepted_leaks_from_underlay
+                .iter()
+                .map(|l| l.prefix.to_owned())
+                .collect(),
+            allowed_anycast_prefixes: profile
+                .allowed_anycast_prefixes
+                .iter()
+                .map(|p| p.prefix.to_owned())
+                .collect(),
+        }
+    }
+}
+
+/// Converts an RPC interface routing profile into the NVUE renderer model.
+impl From<&rpc::FlatInterfaceRoutingProfile> for nvue::InterfaceRoutingProfile {
+    fn from(profile: &rpc::FlatInterfaceRoutingProfile) -> Self {
+        nvue::InterfaceRoutingProfile {
+            allowed_anycast_prefixes: profile
+                .allowed_anycast_prefixes
+                .iter()
+                .map(|p| p.prefix.to_owned())
+                .collect(),
+        }
+    }
 }
 
 /// Update the NVUE network config. Returns Ok(true) if the configuration changed, and
@@ -159,7 +257,8 @@ pub async fn update_nvue(
 ) -> eyre::Result<bool> {
     let hbn_version = match update_flavor {
         NvueUpdateFlavor::StartupFile { .. } => hbn::read_version().await?,
-        NvueUpdateFlavor::RestApi { nvue_client } => nvue_client
+        NvueUpdateFlavor::RestApi { ref nvue_context } => nvue_context
+            .nvue_client
             .system_build_info()
             .await
             .map_err(|e| eyre::eyre!("Couldn't get HBN version from NVUE: {e}"))
@@ -230,6 +329,16 @@ pub async fn update_nvue(
             vec![nvue::PortConfig {
                 interface_name: physical_name,
                 is_phy: true,
+                host_ip: admin_interface.ip.clone(),
+                host_route: admin_interface.interface_prefix.clone(),
+                host_ipv6: admin_interface
+                    .ipv6_interface_config
+                    .as_ref()
+                    .map(|v6| v6.ip.clone()),
+                host_ipv6_route: admin_interface
+                    .ipv6_interface_config
+                    .as_ref()
+                    .map(|v6| v6.interface_prefix.clone()),
                 vlan: admin_interface.vlan_id as u16,
                 vni: if nc.network_virtualization_type() == ::rpc::forge::VpcVirtualizationType::Fnn
                 {
@@ -257,6 +366,14 @@ pub async fn update_nvue(
                 svi_ip: admin_interface.svi_ip.clone(),
                 tenant_vrf_loopback_ip: admin_interface.tenant_vrf_loopback_ip.clone(),
                 network_security_group_id: None, // NSGs are not applied on the admin network.
+                routing_profile: admin_interface
+                    .vpc_routing_profile
+                    .as_ref()
+                    .map(nvue::RoutingProfile::from),
+                interface_routing_profile: admin_interface
+                    .interface_routing_profile
+                    .as_ref()
+                    .map(nvue::InterfaceRoutingProfile::from),
                 is_l2_segment: if nc.network_virtualization_type()
                     == ::rpc::forge::VpcVirtualizationType::Fnn
                 {
@@ -289,6 +406,13 @@ pub async fn update_nvue(
                 interface_name: name,
                 is_phy: net.function_type == rpc::InterfaceFunctionType::Physical as i32,
                 vlan: net.vlan_id as u16,
+                host_ip: net.ip.clone(),
+                host_route: net.interface_prefix.clone(),
+                host_ipv6: net.ipv6_interface_config.as_ref().map(|v6| v6.ip.clone()),
+                host_ipv6_route: net
+                    .ipv6_interface_config
+                    .as_ref()
+                    .map(|v6| v6.interface_prefix.clone()),
                 vni: Some(net.vni), // TODO should this be nc.vni_device?
                 l3_vni: Some(net.vpc_vni),
                 gateway_cidr: net.gateway.clone(),
@@ -307,6 +431,14 @@ pub async fn update_nvue(
                     .network_security_group
                     .as_ref()
                     .map(|n| n.id.clone()),
+                routing_profile: net
+                    .vpc_routing_profile
+                    .as_ref()
+                    .map(nvue::RoutingProfile::from),
+                interface_routing_profile: net
+                    .interface_routing_profile
+                    .as_ref()
+                    .map(nvue::InterfaceRoutingProfile::from),
                 is_l2_segment: net.is_l2_segment,
             });
         }
@@ -318,6 +450,19 @@ pub async fn update_nvue(
     if tenancy_enabled && networks.is_empty() {
         return Err(eyre::eyre!(
             "BUG: network config provided without interfaces"
+        ));
+    }
+
+    // FNN requires a routing profile per rendered port, unless an older
+    // response-level compatibility profile is present.
+    if vpc_virtualization_type == VpcVirtualizationType::Fnn
+        && nc.routing_profile.is_none()
+        && !networks
+            .iter()
+            .all(|network| network.routing_profile.is_some())
+    {
+        return Err(eyre::eyre!(
+            "BUG: FNN config provided without routing-profile"
         ));
     }
 
@@ -437,46 +582,7 @@ pub async fn update_nvue(
         ct_l3_vni: nc.vpc_vni,
         ct_vrf_loopback: "FNN".to_string(),
         l3_domains: vec![],
-        ct_routing_profile: if nc.network_virtualization_type()
-            == ::rpc::forge::VpcVirtualizationType::Fnn
-            && nc.routing_profile.is_none()
-        {
-            return Err(eyre::eyre!(
-                "BUG: FNN config provided without routing-profile"
-            ));
-        } else {
-            nc.routing_profile.as_ref().map(|rp| nvue::RoutingProfile {
-                leak_default_route_from_underlay: rp.leak_default_route_from_underlay,
-                leak_tenant_host_routes_to_underlay: rp.leak_tenant_host_routes_to_underlay,
-                tenant_leak_communities_accepted: rp.tenant_leak_communities_accepted,
-                route_target_imports: rp
-                    .route_target_imports
-                    .iter()
-                    .map(|rt| nvue::RouteTargetConfig {
-                        asn: rt.asn,
-                        vni: rt.vni,
-                    })
-                    .collect(),
-                route_targets_on_exports: rp
-                    .route_targets_on_exports
-                    .iter()
-                    .map(|rt| nvue::RouteTargetConfig {
-                        asn: rt.asn,
-                        vni: rt.vni,
-                    })
-                    .collect(),
-                accepted_leaks_from_underlay: rp
-                    .accepted_leaks_from_underlay
-                    .iter()
-                    .map(|l| l.prefix.to_owned())
-                    .collect(),
-                allowed_anycast_prefixes: rp
-                    .allowed_anycast_prefixes
-                    .iter()
-                    .map(|p| p.prefix.to_owned())
-                    .collect(),
-            })
-        },
+        ct_routing_profile: nc.routing_profile.as_ref().map(nvue::RoutingProfile::from),
         bgp_leaf_session_password: nc.bgp_leaf_session_password.clone(),
     };
 
@@ -553,15 +659,19 @@ pub async fn update_nvue(
             }
             Ok(true)
         }
-        NvueUpdateFlavor::RestApi { nvue_client } => {
+        NvueUpdateFlavor::RestApi { nvue_context } => {
             let config = NvueConfig::from_yaml(&next_contents)
                 .map_err(|e| eyre::eyre!("Couldn't parse NVUE config as YAML: {e}"))?;
-            let revision_id = nvue_client
-                .push_config(&config)
+            let revision_id = nvue_context
+                .update_config(&config)
                 .await
                 .map_err(|e| eyre::eyre!("Couldn't push new config to NVUE server: {e}"))?;
-            tracing::debug!(revision_id, "Applied NVUE config via REST API");
-            Ok(true)
+            if let Some(revision_id) = revision_id {
+                tracing::debug!(revision_id, "Applied NVUE config via REST API");
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         }
     }
 }
@@ -1930,7 +2040,27 @@ mod tests {
     async fn test_with_tenant_fnn_with_leaks() -> Result<(), Box<dyn std::error::Error>> {
         let virtualization_type = VpcVirtualizationType::Fnn;
 
-        let network_config = netconf(virtualization_type, 32, 24, false, None, false, true);
+        //let network_config = netconf(virtualization_type, 32, 24, false, None, false, true);
+
+        let mut network_config = netconf(virtualization_type, 32, 24, false, None, false, true);
+
+        // Set an interface profile for a prefix that falls within the VPC profile's prefix.
+        network_config.tenant_interfaces[0].interface_routing_profile =
+            Some(rpc::FlatInterfaceRoutingProfile {
+                allowed_anycast_prefixes: vec![rpc::PrefixFilterPolicyEntry {
+                    prefix: "5.255.254.67/32".to_string(),
+                }],
+            });
+
+        // Set an interface profile for a prefix that falls OUTSIDE the VPC profile's prefix.
+        // This should trigger policy to empty out and block prefixes from the tenant.
+        // Because a VPC profiles exists and has a prefix list, there is no fallback to AnycastSitePrefixes.
+        network_config.tenant_interfaces[1].interface_routing_profile =
+            Some(rpc::FlatInterfaceRoutingProfile {
+                allowed_anycast_prefixes: vec![rpc::PrefixFilterPolicyEntry {
+                    prefix: "67.67.67.6/7".to_string(),
+                }],
+            });
 
         let td = tempfile::tempdir()?;
         let hbn_root = td.path();
@@ -2317,6 +2447,8 @@ mod tests {
             internal_uuid: None,
             mtu: None,
             ipv6_interface_config: None,
+            vpc_routing_profile: None,
+            interface_routing_profile: None,
         };
         assert_eq!(admin_interface.svi_ip, None);
 
@@ -2368,6 +2500,34 @@ mod tests {
                 internal_uuid: None,
                 mtu: None,
                 ipv6_interface_config: None,
+                vpc_routing_profile: Some(rpc::RoutingProfile {
+                    leak_default_route_from_underlay:
+                        include_network_host_route_and_default_leaking,
+                    leak_tenant_host_routes_to_underlay:
+                        include_network_host_route_and_default_leaking,
+                    tenant_leak_communities_accepted:
+                        include_network_host_route_and_default_leaking,
+                    accepted_leaks_from_underlay: if include_network_host_route_and_default_leaking
+                    {
+                        vec![rpc::PrefixFilterPolicyEntry {
+                            prefix: "10.255.0.0/24".to_string(),
+                        }]
+                    } else {
+                        vec![]
+                    },
+                    allowed_anycast_prefixes: vec![rpc::PrefixFilterPolicyEntry {
+                        prefix: "5.255.254.0/24".to_string(),
+                    }],
+                    route_target_imports: vec![rpc_common::RouteTarget {
+                        asn: 44444,
+                        vni: 55555,
+                    }],
+                    route_targets_on_exports: vec![rpc_common::RouteTarget {
+                        asn: 77415,
+                        vni: 800,
+                    }],
+                }),
+                interface_routing_profile: None,
             },
             rpc::FlatInterfaceConfig {
                 function_type: rpc::InterfaceFunctionType::Physical.into(),
@@ -2542,6 +2702,34 @@ mod tests {
                 internal_uuid: None,
                 mtu: None,
                 ipv6_interface_config: None,
+                vpc_routing_profile: Some(rpc::RoutingProfile {
+                    leak_default_route_from_underlay:
+                        include_network_host_route_and_default_leaking,
+                    leak_tenant_host_routes_to_underlay:
+                        include_network_host_route_and_default_leaking,
+                    tenant_leak_communities_accepted:
+                        include_network_host_route_and_default_leaking,
+                    accepted_leaks_from_underlay: if include_network_host_route_and_default_leaking
+                    {
+                        vec![rpc::PrefixFilterPolicyEntry {
+                            prefix: "10.255.0.0/24".to_string(),
+                        }]
+                    } else {
+                        vec![]
+                    },
+                    allowed_anycast_prefixes: vec![rpc::PrefixFilterPolicyEntry {
+                        prefix: "5.255.254.0/24".to_string(),
+                    }],
+                    route_target_imports: vec![rpc_common::RouteTarget {
+                        asn: 44444,
+                        vni: 55555,
+                    }],
+                    route_targets_on_exports: vec![rpc_common::RouteTarget {
+                        asn: 77415,
+                        vni: 800,
+                    }],
+                }),
+                interface_routing_profile: None,
             },
         ];
 
@@ -2578,13 +2766,15 @@ mod tests {
                 asn: 11111,
                 vni: 22222,
             }],
+
+            // This should be ignored because we've defined the routing profile on the "flat interface" config.
             routing_profile: Some(rpc::RoutingProfile {
                 leak_default_route_from_underlay: include_network_host_route_and_default_leaking,
                 leak_tenant_host_routes_to_underlay: include_network_host_route_and_default_leaking,
                 tenant_leak_communities_accepted: include_network_host_route_and_default_leaking,
                 accepted_leaks_from_underlay: if include_network_host_route_and_default_leaking {
                     vec![rpc::PrefixFilterPolicyEntry {
-                        prefix: "10.255.0.0/24".to_string(),
+                        prefix: "111.255.0.0/24".to_string(),
                     }]
                 } else {
                     vec![]
@@ -2593,14 +2783,15 @@ mod tests {
                     prefix: "5.255.254.0/24".to_string(),
                 }],
                 route_target_imports: vec![rpc_common::RouteTarget {
-                    asn: 44444,
-                    vni: 55555,
+                    asn: 34444,
+                    vni: 85555,
                 }],
                 route_targets_on_exports: vec![rpc_common::RouteTarget {
-                    asn: 77415,
-                    vni: 800,
+                    asn: 67415,
+                    vni: 8000,
                 }],
             }),
+
             network_security_policy_overrides: vec![rpc::ResolvedNetworkSecurityGroupRule {
                 src_prefixes: vec!["7.7.7.0/24".to_string()],
                 dst_prefixes: vec!["7.7.7.0/24".to_string()],
@@ -2772,6 +2963,10 @@ mod tests {
             network_security_group_id: Some(network_security_groups[0].id.clone()),
             interface_name: HBNDeviceNames::hbn_23().reps[0].to_string(),
             is_phy: true,
+            host_ip: "10.217.4.70".to_string(),
+            host_route: "10.217.4.70/32".to_string(),
+            host_ipv6: None,
+            host_ipv6_route: None,
             vlan: 123u16,
             vni: Some(5555),
             l3_vni: Some(7777),
@@ -2789,6 +2984,8 @@ mod tests {
             vpc_prefixes: vec!["10.217.4.168/29".to_string()],
             vpc_peer_prefixes: vec![],
             vpc_peer_vnis: vec![],
+            routing_profile: None,
+            interface_routing_profile: None,
             is_l2_segment: true,
             ipv6_port_config: None,
         }];
@@ -2972,6 +3169,8 @@ mod tests {
             internal_uuid: None,
             mtu: None,
             ipv6_interface_config: None,
+            vpc_routing_profile: None,
+            interface_routing_profile: None,
         };
 
         let mut admin_interface_with_mtu = admin_interface.clone();
@@ -3008,6 +3207,8 @@ mod tests {
                 internal_uuid: None,
                 mtu: None,
                 ipv6_interface_config: None,
+                vpc_routing_profile: None,
+                interface_routing_profile: None,
             },
             rpc::FlatInterfaceConfig {
                 function_type: rpc::InterfaceFunctionType::Physical.into(),
@@ -3033,6 +3234,8 @@ mod tests {
                 internal_uuid: None,
                 mtu: None,
                 ipv6_interface_config: None,
+                vpc_routing_profile: None,
+                interface_routing_profile: None,
             },
         ];
 

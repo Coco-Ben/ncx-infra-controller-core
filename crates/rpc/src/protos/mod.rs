@@ -27,6 +27,12 @@ pub mod common {
 
 #[allow(non_snake_case, unknown_lints, clippy::all)]
 #[rustfmt::skip]
+pub mod scout_firmware_upgrade {
+    include!(concat!(env!("OUT_DIR"), "/scout_firmware_upgrade.rs"));
+}
+
+#[allow(non_snake_case, unknown_lints, clippy::all)]
+#[rustfmt::skip]
 pub mod forge {
     include!(concat!(env!("OUT_DIR"), "/forge.rs"));
 }
@@ -83,12 +89,6 @@ pub mod forge_api_client {
 #[rustfmt::skip]
 pub mod convenience_converters {
     include!(concat!(env!("OUT_DIR"), "/convenience_converters.rs"));
-}
-
-#[allow(non_snake_case, unknown_lints, clippy::all)]
-#[rustfmt::skip]
-pub mod dpa_rpc {
-    include!(concat!(env!("OUT_DIR"), "/dpa_rpc.rs"));
 }
 
 #[allow(clippy::all)]

@@ -111,7 +111,11 @@ async fn test_integration() -> eyre::Result<()> {
     let domain_id = domain::create(carbide_api_addrs, "tenant-1.local").await?;
     let managed_segment_id =
         subnet::create(carbide_api_addrs, &tenant1_vpc, &domain_id, 10, false).await?;
-    subnet::create(carbide_api_addrs, &tenant1_vpc, &domain_id, 11, true).await?;
+
+    // HostInband segments must live in a Flat VPC -- those VPC types are
+    // mutually bound. Create one for the HostInband fixture.
+    let flat_vpc = vpc::create_flat(carbide_api_addrs, tenant_org_id).await?;
+    subnet::create(carbide_api_addrs, &flat_vpc, &domain_id, 11, true).await?;
 
     // Create FNN VPC + VPC prefixes (IPv4 + IPv6) for dual-stack L3 linknet testing.
     let fnn_vpc = vpc::create_fnn(carbide_api_addrs, tenant_org_id).await?;
@@ -214,14 +218,14 @@ fn generate_core_metric_docs(metrics_endpoints: &[SocketAddr]) {
         .into_iter()
         .filter(|metric| !metric.name.starts_with("alt_metric"))
         .collect();
-    let mut docs = "# NCX Infra Controller (NICo) core metrics\n\n".to_string();
+    let mut docs = "# NVIDIA Infra Controller (NICo) Core Metrics\n\n".to_string();
     use std::fmt::Write;
 
     use askama_escape::Escaper;
 
     writeln!(
         &mut docs,
-        "This file contains a list of metrics exported by NCX Infra Controller (NICo). \
+        "This file contains a list of metrics exported by NVIDIA Infra Controller (NICo). \
         The list is auto-generated from an integration test (`test_integration`). \
         Metrics for workflows which are not exercised by the test are missing."
     )
@@ -245,7 +249,7 @@ fn generate_core_metric_docs(metrics_endpoints: &[SocketAddr]) {
         write!(&mut docs, "</td>").unwrap();
         writeln!(&mut docs, "</tr>").unwrap();
     }
-    writeln!(&mut docs, "<table>").unwrap();
+    writeln!(&mut docs, "</table>").unwrap();
 
     let path = std::path::Path::new(METRIC_DOC_PATH);
     assert!(

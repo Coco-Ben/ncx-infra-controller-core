@@ -21,6 +21,7 @@
 
 pub mod attestation;
 pub mod bmc_metadata;
+pub mod bmc_redfish_session;
 pub mod carbide_version;
 pub mod compute_allocation;
 pub mod db_read;
@@ -74,12 +75,12 @@ pub mod power_shelf;
 pub mod predicted_machine_interface;
 pub mod queries;
 pub mod rack;
-pub mod rack_firmware;
 pub mod redfish_actions;
 pub mod resource_pool;
 pub mod route_servers;
 pub mod site_exploration_report;
 pub mod sku;
+pub mod spx_partition;
 pub mod state_history;
 pub mod switch;
 pub mod tenant;
@@ -779,7 +780,7 @@ fn setup_test_logging() {
                 .add_directive("hyper=warn".parse().unwrap())
                 .add_directive("h2=warn".parse().unwrap())
                 // Silence permissive mode related messages
-                .add_directive("carbide::auth=error".parse().unwrap()),
+                .add_directive("carbide_api_core::auth=error".parse().unwrap()),
         )
         .try_init()
     {

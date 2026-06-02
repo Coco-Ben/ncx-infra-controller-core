@@ -42,7 +42,7 @@ BUILD_CONTAINER_AARCH64_URL = { value = "urm.nvidia.com/swngc-ngcc-docker-local/
 #
 # Make sure to update the RUST_NIGHTLY variable in
 # dev/docker/Dockerfile.build-container-x86_64 if you change this.
-RUST_NIGHTLY = "nightly-2025-11-14"
+RUST_NIGHTLY = "nightly-2026-05-27"
 
 [tasks.book]
 workspace = false
@@ -83,6 +83,16 @@ description = "Build carbide-admin-cli in CI"
 workspace = false
 script = '''
 cargo build -p carbide-admin-cli
+# Emit man pages as a build artifact via the hidden `generate-man` subcommand.
+cargo run -p carbide-admin-cli -- generate-man --out-dir target/man
+'''
+
+[tasks.gen-man]
+category = "Build"
+description = "Generate carbide-admin-cli man pages into target/man"
+workspace = false
+script = '''
+cargo run -p carbide-admin-cli -- generate-man --out-dir target/man
 '''
 
 [tasks.build-cli]
@@ -695,7 +705,7 @@ description = "Set up the `cargo carbide-lints` command"
 dependencies = ["setup-nightly-rust"]
 script = [
   # Don't waste cycles, only install what isn't installed
-  "which cargo-carbide-lints >/dev/null 2>&1 || (cd \"${REPO_ROOT}/lints/carbide-lints\" && cargo +${RUST_NIGHTLY} install --path .)",
+  "cd \"${REPO_ROOT}/lints/carbide-lints\" && cargo +${RUST_NIGHTLY} install --path .",
 ]
 
 [tasks.carbide-lints]

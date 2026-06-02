@@ -23,6 +23,7 @@ mod metrics;
 use std::collections::HashMap;
 use std::default::Default;
 use std::io;
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -38,7 +39,7 @@ use forge_secrets::credentials::{BmcCredentialType, CredentialKey, CredentialRea
 use futures_util::FutureExt;
 use libredfish::model::task::TaskState;
 use libredfish::model::update_service::TransferProtocolType;
-use libredfish::{PowerState, RedfishError, SystemPowerControl};
+use libredfish::{PowerState, Redfish, RedfishError, SystemPowerControl};
 use model::firmware::{Firmware, FirmwareComponentType, FirmwareEntry};
 use model::site_explorer::{
     ExploredEndpoint, InitialResetPhase, PowerDrainState, PreingestionState, TimeSyncResetPhase,
@@ -60,10 +61,6 @@ const NOT_FOUND: u16 = 404;
 /// Fallback timeout for BFB copy. SSH layer has 30-min timeout that should fire first;
 /// this catches edge cases where the task dies without reporting.
 const BFB_COPY_TIMEOUT_MINS: i64 = 35;
-
-/// BF2 fallback timeout. SSH layer uses 80-min timeout for BF2 (SFTP capped at ~325 KB/s
-/// with 128 KiB buffer; 1 MiB buffer fails immediately on BF2 BMCs).
-const BFB_COPY_TIMEOUT_MINS_BF2: i64 = 85;
 
 /// Minimum wait time before checking if BFB installation completed.
 const BFB_INSTALLATION_MIN_WAIT_MINS: i64 = 10;
@@ -686,14 +683,9 @@ impl PreingestionManagerStatic {
 
         let redfish_client = match self
             .redfish_client_pool
-            .create_client_for_ingested_host(endpoint.address, None, db)
+            .create_client_for_ingested_host(endpoint.address, db)
             .await
-            .map_err(|e| match e {
-                RedfishClientCreationError::RedfishError(e) => {
-                    PreingestionManagerError::RedfishError(e)
-                }
-                _ => PreingestionManagerError::internal(format!("{e}")),
-            }) {
+        {
             Ok(redfish_client) => redfish_client,
             Err(e) => {
                 tracing::warn!("Redfish connection to {} failed: {e}", endpoint.address);
@@ -901,14 +893,9 @@ impl PreingestionManagerStatic {
 
         let redfish_client = match self
             .redfish_client_pool
-            .create_client_for_ingested_host(endpoint.address, None, db)
+            .create_client_for_ingested_host(endpoint.address, db)
             .await
-            .map_err(|e| match e {
-                RedfishClientCreationError::RedfishError(e) => {
-                    PreingestionManagerError::RedfishError(e)
-                }
-                _ => PreingestionManagerError::internal(format!("{e}")),
-            }) {
+        {
             Ok(redfish_client) => redfish_client,
             Err(e) => {
                 tracing::error!("Redfish connection to {} failed: {e}", endpoint.address);
@@ -1376,7 +1363,7 @@ impl PreingestionManagerStatic {
     ) -> Result<(), DatabaseError> {
         let redfish_client = match self
             .redfish_client_pool
-            .create_client_for_ingested_host(endpoint.address, None, db)
+            .create_client_for_ingested_host(endpoint.address, db)
             .await
         {
             Ok(redfish_client) => redfish_client,
@@ -1453,7 +1440,7 @@ impl PreingestionManagerStatic {
     ) -> PreingestionManagerResult<bool> {
         let redfish_client = match self
             .redfish_client_pool
-            .create_client_for_ingested_host(endpoint.address, None, db)
+            .create_client_for_ingested_host(endpoint.address, db)
             .await
         {
             Ok(redfish_client) => redfish_client,
@@ -1734,14 +1721,9 @@ impl PreingestionManagerStatic {
         tracing::debug!("Checking BMC time sync for {:?}", endpoint);
         let redfish_client = match self
             .redfish_client_pool
-            .create_client_for_ingested_host(endpoint.address, None, db)
+            .create_client_for_ingested_host(endpoint.address, db)
             .await
-            .map_err(|e| match e {
-                RedfishClientCreationError::RedfishError(e) => {
-                    PreingestionManagerError::RedfishError(e)
-                }
-                _ => PreingestionManagerError::internal(format!("{e}")),
-            }) {
+        {
             Ok(redfish_client) => redfish_client,
             Err(e) => {
                 return Err(e);
@@ -1840,7 +1822,7 @@ impl PreingestionManagerStatic {
             BfbPlatformPowercyclePhase::PowerOff => {
                 let redfish_client = match self
                     .redfish_client_pool
-                    .create_client_for_ingested_host(*host_bmc_ip, None, db)
+                    .create_client_for_ingested_host(*host_bmc_ip, db)
                     .await
                 {
                     Ok(c) => c,
@@ -1871,7 +1853,7 @@ impl PreingestionManagerStatic {
             BfbPlatformPowercyclePhase::PowerOn => {
                 let redfish_client = match self
                     .redfish_client_pool
-                    .create_client_for_ingested_host(*host_bmc_ip, None, db)
+                    .create_client_for_ingested_host(*host_bmc_ip, db)
                     .await
                 {
                     Ok(c) => c,
@@ -1974,7 +1956,6 @@ impl PreingestionManagerStatic {
             }
         };
 
-        let is_bf2 = endpoint.report.identify_dpu() == Some(model::DpuModel::BlueField2);
         let bmc_credential_key = CredentialKey::BmcCredentials {
             credential_type: BmcCredentialType::BmcRoot {
                 bmc_mac_address: interface.mac_address,
@@ -1996,10 +1977,10 @@ impl PreingestionManagerStatic {
         tokio::spawn(async move {
             let _permit = permit;
 
-            tracing::info!(%address, is_bf2, "starting BFB copy to DPU rshim");
+            tracing::info!(%address, "starting BFB copy to DPU rshim");
 
             let result = bfb_rshim_copier
-                .copy_bfb_to_dpu_rshim(bmc_addr, &bmc_credential_key, is_bf2)
+                .copy_bfb_to_dpu_rshim(bmc_addr, &bmc_credential_key)
                 .await;
 
             match result {
@@ -2027,12 +2008,7 @@ impl PreingestionManagerStatic {
     ) -> Result<(), DatabaseError> {
         let address = endpoint.address.to_string();
 
-        let is_bf2 = endpoint.report.identify_dpu() == Some(model::DpuModel::BlueField2);
-        let timeout_mins = if is_bf2 {
-            BFB_COPY_TIMEOUT_MINS_BF2
-        } else {
-            BFB_COPY_TIMEOUT_MINS
-        };
+        let timeout_mins = BFB_COPY_TIMEOUT_MINS;
 
         let elapsed_mins = Utc::now().signed_duration_since(*started_at).num_minutes();
         if elapsed_mins > timeout_mins {
@@ -2351,7 +2327,7 @@ async fn initiate_update(
 
     // Setup the Redfish connection
     let redfish_client = match redfish_client_pool
-        .create_client_for_ingested_host(endpoint_clone.address, None, db_pool)
+        .create_client_for_ingested_host(endpoint_clone.address, db_pool)
         .await
     {
         Ok(redfish_client) => redfish_client,
@@ -2468,4 +2444,32 @@ async fn initiate_update(
         .await??;
 
     Ok(())
+}
+
+trait CreateClientForIngestedHost {
+    async fn create_client_for_ingested_host(
+        &self,
+        ip: IpAddr,
+        db_pool: &PgPool,
+    ) -> PreingestionManagerResult<Box<dyn Redfish>>;
+}
+
+impl CreateClientForIngestedHost for Arc<dyn RedfishClientPool> {
+    async fn create_client_for_ingested_host(
+        &self,
+        ip: IpAddr,
+        db_pool: &PgPool,
+    ) -> PreingestionManagerResult<Box<dyn Redfish>> {
+        let bmc_access_info =
+            db::machine_interface::lookup_bmc_access_info(db_pool, ip, None).await?;
+
+        self.client_by_info(&bmc_access_info)
+            .await
+            .map_err(|e| match e {
+                RedfishClientCreationError::RedfishError(e) => {
+                    PreingestionManagerError::RedfishError(e)
+                }
+                _ => PreingestionManagerError::internal(format!("{e}")),
+            })
+    }
 }

@@ -20,6 +20,7 @@ use std::net::IpAddr;
 use std::str::FromStr;
 
 use carbide_network::ip::{IdentifyAddressFamily, IpAddressFamily};
+use carbide_utils::redfish::BmcAccessInfo;
 use carbide_uuid::domain::DomainId;
 use carbide_uuid::machine::{MachineId, MachineInterfaceId};
 use carbide_uuid::network::{NetworkPrefixId, NetworkSegmentId};
@@ -279,6 +280,41 @@ pub async fn find_by_mac_address(
     find_by(txn, ObjectColumnFilter::One(MacAddressColumn, &macaddr)).await
 }
 
+/// This function returns only an IP for efficiency, we don't need to fetch/deserialize the entire
+/// MachineInterfaceSnapshot
+pub async fn lookup_bmc_ip_by_mac_address(
+    db: impl DbReader<'_>,
+    mac_address: MacAddress,
+) -> DatabaseResult<Vec<IpAddr>> {
+    let query = r"SELECT mia.address FROM machine_interfaces mi
+        INNER JOIN machine_interface_addresses mia ON (mia.interface_id = mi.id)
+        WHERE mi.mac_address = $1";
+    sqlx::query_scalar(query)
+        .bind(mac_address)
+        .fetch_all(db)
+        .await
+        .map_err(|e| DatabaseError::query(query, e))
+}
+
+pub async fn lookup_bmc_access_info(
+    db: impl DbReader<'_>,
+    ip: IpAddr,
+    port: Option<u16>,
+) -> DatabaseResult<BmcAccessInfo> {
+    let mac_address = find_by_ip(db, ip)
+        .await?
+        .ok_or_else(|| DatabaseError::NotFoundError {
+            kind: "Machine Interface",
+            id: ip.to_string(),
+        })?
+        .mac_address;
+    Ok(BmcAccessInfo {
+        host: ip.to_string(),
+        port,
+        mac_address,
+    })
+}
+
 pub async fn find_by_ip(
     txn: impl DbReader<'_>,
     ip: IpAddr,
@@ -472,22 +508,17 @@ pub async fn validate_existing_mac_and_create(
                     }
                 }
 
-                // If a fixed IP is specified for this NIC, use static
-                // allocation instead of the pool allocator.
-                let strategy = if let Some(ref expected_nic) = host_nic
-                    && let Some(ref ipaddr) = expected_nic.fixed_ip
-                {
-                    let fixed_addr: IpAddr = ipaddr.parse().map_err(|_| {
-                        DatabaseError::internal(format!(
-                            "invalid fixed_ip '{ipaddr}' for MAC {mac_address}"
-                        ))
-                    })?;
-                    AddressSelectionStrategy::StaticAddress(fixed_addr)
-                } else {
-                    AddressSelectionStrategy::NextAvailableIp
-                };
-
-                let v = create(txn, &network_segments, &mac_address, true, strategy).await?;
+                // Dynamic-pool allocation.
+                // Any AddressSelectionStrategy::StaticIp flows will have happened as part of
+                // preallocate_machine_interface or preallocate_bmc_machine_interface.
+                let v = create(
+                    txn,
+                    &network_segments,
+                    &mac_address,
+                    true,
+                    AddressSelectionStrategy::NextAvailableIp,
+                )
+                .await?;
                 Ok(v)
             } else {
                 Err(DatabaseError::internal(format!(
@@ -523,18 +554,22 @@ pub async fn validate_existing_mac_and_create(
     }
 }
 
-/// Ensure a a `machine_interface` exists for the `mac_address` with its reserved allocation,
-/// either falling into a Carbide-managed segment (when there is a match within a managed
-/// prefix), or into the `static_assignments` segment for IPs that are outside of managed
-/// networks.
+/// Ensure a a `machine_interface` exists for the `mac_address` with its
+/// reserved allocation, either falling into a Carbide-managed segment (when
+/// there is a match within a managed prefix), or into the `static_assignments`
+/// segment for IPs that are outside of managed networks.
+///
+/// Calls are idempotent on the input `(mac_address, static_ip)`, meaning
+/// repeat calls return `Ok(())` if/once the end state matches the request.
 ///
 /// Errors on conflicts that need operator attention, e.g.
 /// - The interface for this MAC exists but carries different addresses, or,
 /// - The IP is already allocated to a different MAC.
 ///
-/// Called from the expected-machine handlers to do config time preallocation, and from
-/// the DHCP `discover()` path to re-allocate if needed (ensuring static DHCP reservations
-/// are maintained). Tbh it could probably just be in the DHCP `discover()` path only.
+/// Called as part of site-explorer iterations (when an ExpectedMachine has a
+/// static assignment/reservation configured), and from the DHCP `discover()`
+/// path (when a client whose configuration expects a static address) to ensure
+/// the fixed-address is returned.
 pub async fn preallocate_machine_interface(
     txn: &mut PgConnection,
     mac_address: MacAddress,
@@ -551,27 +586,48 @@ pub async fn preallocate_bmc_machine_interface(
     preallocate_machine_interface_with_type(txn, mac_address, static_ip, InterfaceType::Bmc).await
 }
 
+/// If a machine interface row already exists for `mac_address`, reconcile it against the
+/// requested (`static_ip`, `interface_type`):
+///   - Returns `Ok(true)` when an existing row carries `static_ip`. Promotes `interface_type`
+///     (and clears `primary_interface` for Bmc) if those don't already match.
+///   - Returns `Ok(false)` when no row exists for `mac_address` — caller should create.
+///   - Returns `Err(InvalidArgument)` when a row exists but carries different addresses.
+async fn reconcile_existing_preallocation(
+    txn: &mut PgConnection,
+    mac_address: MacAddress,
+    static_ip: IpAddr,
+    interface_type: InterfaceType,
+) -> DatabaseResult<bool> {
+    let existing = find_by_mac_address(&mut *txn, mac_address).await?;
+    let Some(iface) = existing.first() else {
+        return Ok(false);
+    };
+    if !iface.addresses.contains(&static_ip) {
+        return Err(DatabaseError::InvalidArgument(format!(
+            "a machine interface already exists for MAC {mac_address} with addresses {:?}; use update to change the IP address",
+            iface.addresses,
+        )));
+    }
+    if iface.interface_type != interface_type {
+        set_interface_type(&iface.id, interface_type, txn).await?;
+    }
+    if interface_type == InterfaceType::Bmc && iface.primary_interface {
+        set_primary_interface(&iface.id, false, txn).await?;
+    }
+    Ok(true)
+}
+
 async fn preallocate_machine_interface_with_type(
     txn: &mut PgConnection,
     mac_address: MacAddress,
     static_ip: IpAddr,
     interface_type: InterfaceType,
 ) -> DatabaseResult<()> {
-    let existing = find_by_mac_address(&mut *txn, mac_address).await?;
-    if let Some(iface) = existing.first() {
-        if iface.addresses.contains(&static_ip) {
-            if iface.interface_type != interface_type {
-                set_interface_type(&iface.id, interface_type, txn).await?;
-            }
-            if interface_type == InterfaceType::Bmc && iface.primary_interface {
-                set_primary_interface(&iface.id, false, txn).await?;
-            }
-            return Ok(());
-        }
-        return Err(DatabaseError::InvalidArgument(format!(
-            "a machine interface already exists for MAC {mac_address} with addresses {:?}; use update to change the IP address",
-            iface.addresses,
-        )));
+    // If there's already a matching record for (ip, mac), just return Ok,
+    // instead of attempting to insert, getting a duplicate error, and then
+    // handling.
+    if reconcile_existing_preallocation(txn, mac_address, static_ip, interface_type).await? {
+        return Ok(());
     }
 
     if let Some(existing_addr) =
@@ -588,7 +644,7 @@ async fn preallocate_machine_interface_with_type(
         None => db_network_segment::static_assignments(&mut *txn).await?,
     };
 
-    create_with_type(
+    match create_with_type(
         txn,
         std::slice::from_ref(&segment),
         &mac_address,
@@ -596,16 +652,33 @@ async fn preallocate_machine_interface_with_type(
         AddressSelectionStrategy::StaticAddress(static_ip),
         interface_type,
     )
-    .await?;
-
-    tracing::info!(
-        %mac_address,
-        %static_ip,
-        segment_id = %segment.id,
-        "Pre-allocated static machine interface"
-    );
-
-    Ok(())
+    .await
+    {
+        Ok(_) => {
+            tracing::info!(
+                %mac_address,
+                %static_ip,
+                segment_id = %segment.id,
+                "Pre-allocated static machine interface"
+            );
+            Ok(())
+        }
+        Err(DatabaseError::NetworkSegmentDuplicateMacAddress(_)) => {
+            // Looks like we might have lost a race with anohter inserter. Try to
+            // uphold our idempotency by re-fetching to reconcile. If the conflicting
+            // row carries our `static_ip`, our work is already done!
+            // Otherwise return an error.
+            if reconcile_existing_preallocation(txn, mac_address, static_ip, interface_type).await?
+            {
+                Ok(())
+            } else {
+                Err(DatabaseError::internal(format!(
+                    "duplicate-MAC error for {mac_address}, but could not reconcile",
+                )))
+            }
+        }
+        Err(e) => Err(e),
+    }
 }
 
 pub async fn create(

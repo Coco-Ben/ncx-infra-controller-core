@@ -24,9 +24,12 @@ use model::instance::config::extension_services::InstanceExtensionServicesConfig
 use model::instance::config::infiniband::InstanceInfinibandConfig;
 use model::instance::config::network::InstanceNetworkConfig;
 use model::instance::config::nvlink::InstanceNvLinkConfig;
+use model::instance::config::spx::InstanceSpxConfig;
+use model::instance::status::spx::InstanceSpxStatus;
 use model::instance::status::{InstanceStatus, InstanceStatusObservations, SyncState};
 use model::machine::infiniband::MachineInfinibandStatusObservation;
 use model::machine::nvlink::MachineNvLinkStatusObservation;
+use model::machine::spx::MachineSpxStatusObservation;
 use model::machine::{ManagedHostState, ReprovisionRequest};
 
 use crate as rpc;
@@ -37,6 +40,7 @@ pub mod extension_service;
 pub mod infiniband;
 pub mod network;
 pub mod nvlink;
+pub mod spx;
 pub mod tenant;
 
 impl TryFrom<InstanceStatus> for rpc::InstanceStatus {
@@ -49,6 +53,7 @@ impl TryFrom<InstanceStatus> for rpc::InstanceStatus {
             infiniband: Some(status.infiniband.try_into()?),
             dpu_extension_services: Some(status.extension_services.try_into()?),
             nvlink: Some(status.nvlink.try_into()?),
+            spx_status: Some(status.spx_status.try_into()?),
             configs_synced: rpc::SyncState::try_from(status.configs_synced)? as i32,
             update: status.reprovision_request.map(|request| request.into()),
         })
@@ -71,13 +76,16 @@ pub fn instance_status_from_config_and_observation(
     ib_config: Versioned<&InstanceInfinibandConfig>,
     extension_services_config: Versioned<&InstanceExtensionServicesConfig>,
     nvlink_config: Versioned<&InstanceNvLinkConfig>,
+    spx_config: Versioned<&InstanceSpxConfig>,
     observations: &InstanceStatusObservations,
     machine_state: ManagedHostState,
     delete_requested: bool,
     reprovision_request: Option<ReprovisionRequest>,
     ib_status: Option<&MachineInfinibandStatusObservation>,
     nvlink_status: Option<&MachineNvLinkStatusObservation>,
+    spx_status: Option<&MachineSpxStatusObservation>,
     is_network_config_request_pending: bool,
+    host_health: &model::health::HealthReportSources,
 ) -> Result<InstanceStatus, RpcDataConversionError> {
     let mut instance_config_synced = SyncState::Synced;
 
@@ -122,6 +130,8 @@ pub fn instance_status_from_config_and_observation(
         nvlink_status,
     );
 
+    let spx_status = InstanceSpxStatus::from_config_and_observation(spx_config, spx_status);
+
     let phone_home_last_contact = observations.phone_home_last_contact;
 
     // If additional configs are added, they need to be incorporated here
@@ -130,9 +140,11 @@ pub fn instance_status_from_config_and_observation(
         infiniband.configs_synced,
         extension_services.configs_synced,
         nvlink.configs_synced,
+        spx_status.configs_synced,
         instance_config_synced,
     ) {
         (
+            SyncState::Synced,
             SyncState::Synced,
             SyncState::Synced,
             SyncState::Synced,
@@ -150,6 +162,7 @@ pub fn instance_status_from_config_and_observation(
                 instance_config.os.phone_home_enabled,
                 phone_home_last_contact,
                 extension_services_ready,
+                host_health.repair_merge_active(),
             )?,
             true => {
                 // If instance deletion was requested, we always confirm the
@@ -169,6 +182,7 @@ pub fn instance_status_from_config_and_observation(
         infiniband,
         extension_services,
         nvlink,
+        spx_status,
         configs_synced,
         reprovision_request,
     })
@@ -187,12 +201,94 @@ impl TryFrom<SyncState> for rpc::SyncState {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
+    use config_version::ConfigVersion;
+    use health_report::{HealthReport, REPAIR_REQUEST_MERGE_SOURCE};
+    use model::health::HealthReportSources;
+    use model::instance::config::InstanceConfig;
+    use model::instance::config::extension_services::InstanceExtensionServicesConfig;
+    use model::instance::config::infiniband::InstanceInfinibandConfig;
+    use model::instance::config::network::InstanceNetworkConfig;
+    use model::instance::config::nvlink::InstanceNvLinkConfig;
+    use model::instance::config::tenant_config::TenantConfig;
+    use model::instance::status::InstanceStatusObservations;
     use model::instance::status::tenant::TenantState;
-    use model::machine::{DpuReprovisionStates, ManagedHostState, ReprovisionState};
+    use model::machine::{DpuReprovisionStates, InstanceState, ManagedHostState, ReprovisionState};
+    use model::os::{OperatingSystem, OperatingSystemVariant};
+    use model::tenant::TenantOrganizationId;
+    use uuid::Uuid;
 
     use super::*;
+
+    fn minimal_instance_config() -> InstanceConfig {
+        InstanceConfig {
+            tenant: TenantConfig {
+                tenant_organization_id: TenantOrganizationId::try_from("TenantA".to_string())
+                    .unwrap(),
+                tenant_keyset_ids: vec![],
+                hostname: None,
+            },
+            os: OperatingSystem {
+                user_data: None,
+                variant: OperatingSystemVariant::OsImage(Uuid::nil()),
+                phone_home_enabled: false,
+                run_provisioning_instructions_on_every_boot: false,
+            },
+            network: InstanceNetworkConfig::default(),
+            infiniband: InstanceInfinibandConfig::default(),
+            network_security_group_id: None,
+            extension_services: InstanceExtensionServicesConfig::default(),
+            nvlink: InstanceNvLinkConfig::default(),
+            spxconfig: InstanceSpxConfig::default(),
+        }
+    }
+
+    #[test]
+    fn repair_merge_active_yields_repairing_via_status_pipeline() {
+        let config = minimal_instance_config();
+        let version = ConfigVersion::initial();
+        let mut health = HealthReportSources::default();
+        health.merges.insert(
+            REPAIR_REQUEST_MERGE_SOURCE.to_string(),
+            HealthReport {
+                source: REPAIR_REQUEST_MERGE_SOURCE.to_string(),
+                ..Default::default()
+            },
+        );
+
+        let status = instance_status_from_config_and_observation(
+            HashMap::new(),
+            Versioned::new(&config, version),
+            Versioned::new(&config.network, version),
+            Versioned::new(&config.infiniband, version),
+            Versioned::new(&config.extension_services, version),
+            Versioned::new(&config.nvlink, version),
+            Versioned::new(&config.spxconfig, version),
+            &InstanceStatusObservations {
+                network: HashMap::new(),
+                extension_services: HashMap::new(),
+                phone_home_last_contact: None,
+            },
+            ManagedHostState::Assigned {
+                instance_state: InstanceState::Ready,
+            },
+            false,
+            None,
+            None,
+            None,
+            None,
+            false,
+            &health,
+        )
+        .unwrap();
+
+        assert_eq!(
+            status.tenant.as_ref().map(|t| t.state),
+            Some(TenantState::Repairing)
+        );
+    }
 
     #[test]
     fn test_tenant_state() {
@@ -213,6 +309,7 @@ mod tests {
                 SyncState::Synced,
                 false,
                 None,
+                false,
                 false,
             )
             .unwrap(),
