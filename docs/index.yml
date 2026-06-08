@@ -127,6 +127,8 @@ navigation:
               path: dpu-management/dpu_configuration.md
             - page: BlueField DPU Operations
               path: dpu-management/dpu-operations.md
+        - page: Tenant Lifecycle Cleanup
+          path: operations/tenant-lifecycle-cleanup.md
         - page: Network Isolation
           path: manuals/network_isolation.md
         - page: Network Security Groups
