@@ -63,7 +63,7 @@ pub fn nvlink_config_synced(
     }
 
     let Some(observation) = observation.as_ref() else {
-        return Err(NvLinkConfigNotSyncedReason("Due to missing NvLink status observation, it can't be verified whether the NvLink config is applied to NMX-M".to_string()));
+        return Err(NvLinkConfigNotSyncedReason("Due to missing NvLink status observation, it can't be verified whether the NvLink config is applied to NMX-C".to_string()));
     };
 
     for gpu_config in config.gpu_configs.iter() {
@@ -81,9 +81,10 @@ pub fn nvlink_config_synced(
             ));
         };
         if gpu_config.logical_partition_id != gpu_observation.logical_partition_id {
-            return Err(NvLinkConfigNotSyncedReason(
-                "Logical partition ID mismatch between config and observation".to_string(),
-            ));
+            return Err(NvLinkConfigNotSyncedReason(format!(
+                "Logical partition ID mismatch between config and observation (gpu_config.logical_partition_id={:?}, gpu_observation.logical_partition_id={:?})",
+                gpu_config.logical_partition_id, gpu_observation.logical_partition_id,
+            )));
         }
         if gpu_config.logical_partition_id.is_some() && gpu_observation.partition_id.is_none() {
             return Err(NvLinkConfigNotSyncedReason(

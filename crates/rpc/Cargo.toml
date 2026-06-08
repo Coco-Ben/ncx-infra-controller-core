@@ -27,7 +27,15 @@ name = "rpc"
 [features]
 sqlx = ["dep:sqlx"]
 cli = ["dep:clap", "dep:prettytable-rs", "dep:serde_yaml", "dep:csv"]
-model = ["dep:carbide-api-model", "dep:once_cell", "dep:itertools", "dep:itertools", "dep:regex", "dep:base64" ]
+model = [
+  "dep:carbide-api-model",
+  "dep:once_cell",
+  "dep:itertools",
+  "dep:itertools",
+  "dep:regex",
+  "dep:base64",
+]
+test-support = ["dep:carbide-prost-builder"]
 
 [dependencies]
 
@@ -39,6 +47,7 @@ carbide-tls = { path = "../tls" }
 carbide-health-report = { path = "../health-report" }
 carbide-libmlx-model = { path = "../libmlx-model" }
 carbide-measured-boot = { path = "../measured-boot", default-features = false }
+carbide-prost-builder = { path = "../prost-builder", optional = true }
 carbide-secrets = { path = "../secrets" }
 carbide-network = { path = "../network" }
 carbide-utils = { path = "../utils" }
@@ -84,18 +93,19 @@ async-trait = { workspace = true }
 nonempty = { workspace = true }
 clap = { features = ["derive"], optional = true, workspace = true }
 sqlx = { workspace = true, features = [
-    "runtime-tokio-rustls",
-    "mac_address",
-    "ipnetwork",
-    "uuid",
-    "migrate",
-    "postgres",
-    "chrono",
-    "macros",
-    "json",
+  "runtime-tokio",
+  "tls-rustls",
+  "mac_address",
+  "ipnetwork",
+  "uuid",
+  "migrate",
+  "postgres",
+  "chrono",
+  "macros",
+  "json",
 ], optional = true }
 prettytable-rs = { optional = true, default-features = false, features = [
-    "csv",
+  "csv",
 ], workspace = true }
 serde_yaml = { optional = true, workspace = true }
 data-encoding = { workspace = true }

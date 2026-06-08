@@ -6,7 +6,6 @@ Terms are grouped by domain rather than by repository. A reader looking up "Site
 
 This glossary focuses on NICo-specific concepts: terms that only make sense in the context of the NICo platform. Where a term has a general industry definition but carries additional NICo-specific meaning, this glossary explains the NICo-specific part.
 
-<Note> You will encounter references to Forge, Carbide, and BMM in source code, CLI tool names, protobuf definitions, OpenAPI text, Helm charts, and image names. These were internal NVIDIA project names that preceded the current NICo branding. The documentation should use NICo names for product concepts, but many implementation artifacts still use legacy names such as `carbide-*`, `forge-*`, and `FORGE_*`. When this glossary references an artifact, role string, metric namespace, or configuration key, it preserves the name used by that interface.</Note>
 
 ## Platform Architecture
 
@@ -17,10 +16,6 @@ NVIDIA Infra Controller. NICo is the platform that provides site-local, zero-tru
 ### NCP
 
 NVIDIA Cloud Partner. In NICo docs, NCP usually refers to an infrastructure provider operating NICo-managed environments for tenant workloads.
-
-### Carbide
-
-A legacy internal name for NICo components. Carbide appears in older source paths, service names, CLI references, and deployment artifacts. New documentation should use NICo names unless referring to an interface that still uses a legacy name.
 
 ### ManagedHost
 
@@ -60,13 +55,13 @@ The NVIDIA DPU family used by NICo for tenant isolation and site management. A B
 
 ### API Server
 
-The main NICo REST API server. It handles external HTTP requests, authenticates callers through JWTs, and routes requests to resource handlers. It is the primary entry point for tenant, site, machine, and networking operations exposed through the REST API. Current deployment artifacts in this repo still refer to this component as `carbide-rest-api`.
+The main NICo REST API server. It handles external HTTP requests, authenticates callers through JWTs, and routes requests to resource handlers. It is the primary entry point for tenant, site, machine, and networking operations exposed through the REST API. Current deployment artifacts in this repo still refer to this component as `nico-rest-api`.
 
 The NICo REST repository's Helm charts and generated SDK now use `nico-rest-api`.
 
 ### Workflow Worker
 
-The Temporal workflow worker service for NICo REST. It executes workflow logic for long-running operations such as site setup and hardware lifecycle management. Current deployment artifacts in this repo still refer to this component as `carbide-rest-workflow`.
+The Temporal workflow worker service for NICo REST. It executes workflow logic for long-running operations such as site setup and hardware lifecycle management. Current deployment artifacts in this repo still refer to this component as `nico-rest-workflow`.
 
 The NICo REST repository's Helm charts now use `nico-rest-workflow`.
 
@@ -74,31 +69,31 @@ The NICo REST repository's Helm charts now use `nico-rest-workflow`.
 
 The on-site datacenter agent that bridges Temporal workflows to NICo Core. It polls a site-specific Temporal namespace for workflow tasks, translates them into gRPC calls against the local Core instance, and publishes inventory data back through Temporal.
 
-REST-dispatched operations that need site-local hardware access flow through a Site Agent before reaching Core and the managed hardware. Current deployment artifacts in this repo still refer to this component as `carbide-rest-site-agent`; older metrics and code may also use the internal codename Elektra.
+REST-dispatched operations that need site-local hardware access flow through a Site Agent before reaching Core and the managed hardware. Current deployment artifacts in this repo still refer to this component as `nico-rest-site-agent`; older metrics and code may also use the internal codename Elektra.
 
 The NICo REST repository's Helm charts now use `nico-rest-site-agent`.
 
 ### Site Manager
 
-A NICo REST service used for site-level management and Site Agent bootstrap flows. Current deployment artifacts in this repo still refer to this component as `carbide-rest-site-manager`.
+A NICo REST service used for site-level management and Site Agent bootstrap flows. Current deployment artifacts in this repo still refer to this component as `nico-rest-site-manager`.
 
 ### Certificate Manager
 
-A NICo REST certificate-management component used by the REST deployment. Current deployment artifacts in this repo still refer to the component and issuer with names such as `carbide-rest-cert-manager` and `carbide-rest-ca-issuer`. The REST repository also contains a native certificate manager that issues certificates using Go crypto and integrates with cert-manager.io.
+A NICo REST certificate-management component used by the REST deployment. Current deployment artifacts in this repo still refer to the component and issuer with names such as `nico-rest-cert-manager` and `nico-rest-ca-issuer`. The REST repository also contains a native certificate manager that issues certificates using Go crypto and integrates with cert-manager.io.
 
 ### Database Migrations
 
-The NICo REST deployment component that manages PostgreSQL database schema evolution. Current deployment artifacts in this repo still describe the REST stack with `carbide-rest-*` names.
+The NICo REST deployment component that manages PostgreSQL database schema evolution. Current deployment artifacts in this repo still describe the REST stack with `nico-rest-*` names.
 
 ### CLI Client (`nicocli`)
 
-The command-line tool for interacting with the REST API. It supports scripted usage and interactive session management for environment switching and resource commands. It was previously named `carbidecli`.
+The command-line tool for interacting with the REST API. It supports scripted usage and interactive session management for environment switching and resource commands. It was previously named `nicocli`.
 
 ## Authentication and Authorization
 
 ### Authorization Roles
 
-NICo REST authorizes callers with provider and tenant role families. The REST SDK and current REST OpenAPI text describe authorization in terms of role suffixes such as `PROVIDER_ADMIN` and `TENANT_ADMIN`. Some generated tests, older OpenAPI snapshots, and bundled development Keycloak examples still use prefixed role strings such as `FORGE_PROVIDER_ADMIN` and `FORGE_TENANT_ADMIN`, so use the role format required by the target issuer and API version.
+NICo REST authorizes callers with provider and tenant role families. The REST SDK and current REST OpenAPI text describe authorization in terms of role suffixes such as `PROVIDER_ADMIN` and `TENANT_ADMIN`. Some generated tests, older OpenAPI snapshots, and bundled development Keycloak examples still use prefixed role strings such as `NICO_PROVIDER_ADMIN` and `NICO_TENANT_ADMIN`, so use the role format required by the target issuer and API version.
 
 | Role family | Scope | Capabilities |
 | --- | --- | --- |
@@ -143,6 +138,18 @@ VXLAN solves this by wrapping an Ethernet frame in a VXLAN packet identified by 
 
 A NICo concept for defining IP address pools. Underlay segments are used for management traffic on the underlying physical network, such as DPU OOB and BMC addresses. Overlay segments are used for tenant-facing networks built on top of VXLAN. NICo assigns IPs from overlay segments to Hosts when creating instances.
 
+### HostInband Network Segment
+
+A network segment type for the underlay network that a zero-DPU host's NIC attaches to directly. Unlike overlay (tenant) segments, a HostInband segment describes a real underlay subnet, exists before any VPC, and may remain unassociated with a VPC. It is the only segment type a Flat VPC accepts. Operators declare HostInband segments in the API server configuration (or create them through the segment API); tenant instances on zero-DPU hosts attach to them automatically rather than drawing a link-net from a VpcPrefix.
+
+### Flat VPC
+
+A VPC virtualization type for tenant instances on zero-DPU hosts. A Flat VPC is a real tenant VPC — it has an owner, a VNI, and can carry a Network Security Group — but its data plane is operator-managed: NICo allocates the underlay addresses and records the VPC's bookkeeping, while routing and L3/L4 enforcement live on the operator's physical or SDN fabric rather than on a NICo-managed DPU overlay. Tenant instances attach directly to HostInband segments. Contrast with the EthernetVirtualizer (ETV) virtualization type, where NICo programs a per-VPC VRF on each DPU.
+
+### Zero-DPU Host
+
+A managed host that NICo operates without a NICo-managed DPU — either a host with no DPU hardware (`no_dpu`) or a host whose BlueField DPU is run as a plain NIC (`nic_mode`). NICo does not build an overlay for a zero-DPU host; its tenant instances attach directly to HostInband underlay segments and belong to Flat VPCs. DPU mode is set site-wide or per host in the API server configuration.
+
 ### HBN in NICo
 
 HBN runs as a container on the DPU and manages network routing using [Cumulus Linux](https://www.nvidia.com/en-us/networking/ethernet-switching/cumulus-linux/) components such as FRR and NVUE. NICo installs and manages HBN as part of DPU provisioning. Ethernet tenancy enforcement is performed within HBN on the DPU; NICo does not need to change Spectrum switches running Cumulus Linux.
@@ -151,11 +158,11 @@ DPU health reporting includes HBN status such as whether the container is runnin
 
 General reference: [DOCA HBN Service](https://docs.nvidia.com/doca/sdk/pdf/doca-hbn-service.pdf)
 
-### Fabric Nearest Neighbor (FNN)
+### FNN
 
-The networking subsystem within NICo Core that manages VPC creation, subnet allocation, and VXLAN overlay configuration. The acronym appears as Fabric Nearest Neighbor in current configuration documentation. Older design documents expanded the same acronym using a legacy project name.
+The networking subsystem within NICo Core that manages VPC creation, subnet allocation, and VXLAN overlay configuration.
 
-FNN coordinates DPU-side HBN configuration with the NICo data model to deliver tenant-isolated L2 and L3 networks. FNN supports two VPC virtualization types, `fnn_classic` and `fnn_l3`, and introduces per-VPC routing profiles that control route import and export policies, access tiers, and underlay leak acceptance.
+FNN coordinates DPU-side HBN configuration with the NICo data model to deliver tenant-isolated L2 and L3 networks. FNN is itself one of NICo's VPC virtualization types — the L3 DPU-overlay type, alongside `EthernetVirtualizer` (ETV) and `Flat` — and is the only one that uses per-VPC routing profiles, which control route-target import and export policies, access tiers, and underlay leak acceptance.
 
 ### DHCP in NICo
 
@@ -210,7 +217,7 @@ The high-speed GPU-to-GPU fabric managed outside NICo Core by NMX-M. NICo coordi
 
 ### FMDS
 
-NICo Metadata Service. FMDS runs on or alongside the DPU path and provides tenant workloads with instance metadata such as machine identity, boot information, and applied instance configuration. Some implementation artifacts still expand the legacy name as Forge Metadata Service.
+NICo Metadata Service. FMDS runs on or alongside the DPU path and provides tenant workloads with instance metadata such as machine identity, boot information, and applied instance configuration. Some implementation artifacts still expand the legacy name as NICo Metadata Service.
 
 ### LLDP
 
@@ -353,8 +360,8 @@ NICo Core is site-local and continues to manage hardware independently of the RE
 | DOCA | Data Center-on-a-Chip Architecture | NVIDIA software framework used by BlueField DPUs |
 | DPU | Data Processing Unit | Central enforcement point for tenant isolation |
 | EVPN | Ethernet VPN | Control-plane technology used with VXLAN overlays |
-| FMDS | NICo Metadata Service | Metadata service for tenant workloads; legacy artifacts may expand it as Forge Metadata Service |
-| FNN | Fabric Nearest Neighbor | VPC, subnet, and VXLAN management subsystem in Core |
+| FMDS | NICo Metadata Service | Metadata service for tenant workloads; legacy artifacts may expand it as NICo Metadata Service |
+| FNN | Full Next-generation Networking | VPC, subnet, and VXLAN management subsystem in Core |
 | gRPC | Google Remote Procedure Call | RPC framework used between the Site Agent and NICo Core |
 | HBN | Host Based Networking | Software networking stack on the DPU for VXLAN and EVPN |
 | IMDS | Instance Metadata Service | Service that can issue identity and metadata to tenant processes |
@@ -362,7 +369,7 @@ NICo Core is site-local and continues to manage hardware independently of the RE
 | KAS | Key Authentication Service | NGC token authentication accepted by REST API |
 | LLDP | Link Layer Discovery Protocol | Neighbor discovery protocol used for network topology visibility |
 | NCP | NVIDIA Cloud Partner | Infrastructure partner operating NICo-managed environments |
-| NICo | NVIDIA Infra Controller | This platform, also known historically as Forge, Carbide, and BMM |
+| NICo | NVIDIA Infra Controller | This platform, also known historically as NICo, NICo, and BMM |
 | NMX-M | NVLink Management | NVLink partition management for GPU-to-GPU isolation |
 | OOB | Out of Band | Management network path independent from the Host OS |
 | P_Key | Partition Key | InfiniBand isolation identifier assigned by UFM |

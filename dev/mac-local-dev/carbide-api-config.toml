@@ -145,6 +145,11 @@ network_segment_drain_time = "60s"
 [network_segment_state_controller.controller]
 iteration_time = "10s"
 
+[vpc_prefix_state_controller]
+vpc_prefix_drain_time = "60s"
+[vpc_prefix_state_controller.controller]
+iteration_time = "10s"
+
 [ib_partition_state_controller.controller]
 iteration_time = "120s" # Unlikely to be supported for K3S
 
@@ -154,7 +159,6 @@ create_machines = true
 allow_changing_bmc_proxy = true
 bmc_proxy = ":2000"
 run_interval = "10s"
-allow_zero_dpu_hosts = true
 
 [component_manager]
 nv_switch_backend = "nsm"

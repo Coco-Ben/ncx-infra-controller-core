@@ -28,6 +28,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // so that different builds get a different binary file and concurrent builds don't collide
     let reflection = out_dir.join("forge.bin");
 
+    let derive_prost_builder =
+        "#[cfg_attr(feature = \"test-support\", derive(carbide_prost_builder::Builder))]";
+
     tonic_prost_build::configure()
         .file_descriptor_set_path(reflection)
         .type_attribute(
@@ -51,6 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .extern_path(".common.DomainId", "::carbide_uuid::domain::DomainId")
         .extern_path(".common.DpaInterfaceId", "::carbide_uuid::dpa_interface::DpaInterfaceId")
         .extern_path(".common.IBPartitionId", "::carbide_uuid::infiniband::IBPartitionId")
+        .extern_path(".common.SpxPartitionId", "::carbide_uuid::spx::SpxPartitionId")
         .extern_path(".common.InstanceId", "::carbide_uuid::instance::InstanceId")
         .extern_path(".common.MachineId", "::carbide_uuid::machine::MachineId")
         .extern_path(".common.MachineInterfaceId", "::carbide_uuid::machine::MachineInterfaceId")
@@ -108,7 +112,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .type_attribute("forge.FabricManagerStatus", "#[derive(serde::Serialize)]")
         .type_attribute("forge.FlatInterfaceConfig", "#[derive(serde::Serialize)]")
         .type_attribute("forge.FlatInterfaceIpv6Config", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.FlatInterfaceRoutingProfile", "#[derive(serde::Serialize)]")
         .type_attribute("forge.InstanceInterfaceIpv6Config", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(
+            "forge.InstanceInterfaceRoutingProfile",
+            "#[derive(serde::Serialize)]",
+        )
         .type_attribute(
             "forge.InstanceInterfaceConfig",
             "#[derive(serde::Serialize)]",
@@ -125,6 +134,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .type_attribute("forge.InstanceNetworkConfig", "#[derive(serde::Serialize)]")
         .type_attribute(
             "forge.InstanceInfinibandConfig",
+            "#[derive(serde::Deserialize, serde::Serialize)]",
+        )
+        .type_attribute(
+            "forge.InstanceSpxConfig",
+            "#[derive(serde::Deserialize, serde::Serialize)]",
+        )
+        .type_attribute(
+            "forge.InstanceSpxAttachment",
             "#[derive(serde::Deserialize, serde::Serialize)]",
         )
         .type_attribute("forge.InstanceStorageConfig", "#[derive(serde::Serialize)]")
@@ -165,6 +182,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .type_attribute("forge.DpuExtensionServiceObservabilityConfig.config", "#[derive(serde::Serialize, serde::Deserialize)]")
         .type_attribute("forge.DpuExtensionServiceObservabilityConfig", "#[derive(serde::Serialize, serde::Deserialize)]")
         .type_attribute("forge.DpuExtensionServiceObservability.configs", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute("forge.InstanceSpxStatus", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.InstanceSpxAttachmentStatus", "#[derive(serde::Serialize)]")
         .type_attribute("forge.InstanceNVLinkConfig", "#[derive(serde::Deserialize, serde::Serialize)]")
         .type_attribute("forge.InstanceNVLinkGpuConfig", "#[derive(serde::Deserialize, serde::Serialize)]")
         .type_attribute("forge.InstanceNVLinkStatus", "#[derive(serde::Serialize)]")
@@ -192,6 +211,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .type_attribute("common.NVLinkPartitionId", "#[derive(serde::Serialize)]")
         .type_attribute("forge.MachineNVLinkInfo", "#[derive(serde::Serialize)]")
         .type_attribute("forge.NVLinkGpu", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.MachineSpxStatusObservation", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.MachineSpxAttachmentStatusObservation", "#[derive(serde::Serialize)]")
         .type_attribute(
             "forge.InstanceInterfaceStatus",
             "#[derive(serde::Serialize)]",
@@ -300,16 +321,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .type_attribute("forge.TrafficInterceptConfig", "#[derive(serde::Serialize)]")
         .type_attribute("forge.TrafficInterceptBridging", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.HostRepresentorInterceptBridging", "#[derive(serde::Serialize)]")
         .type_attribute("forge.NetworkPrefix", "#[derive(serde::Serialize)]")
         .type_attribute("forge.NetworkPrefixEvent", "#[derive(serde::Serialize)]")
         .type_attribute("forge.NetworkSegmentConfig", "#[derive(serde::Serialize)]")
         .type_attribute("forge.NetworkSegmentStatus", "#[derive(serde::Serialize)]")
         .type_attribute("forge.NetworkSegment", "#[derive(serde::Serialize)]")
         .type_attribute("forge.IBPartitionConfig", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.SpxPartitionConfig", "#[derive(serde::Serialize)]")
         .type_attribute("forge.IBPartitionStatus", "#[derive(serde::Serialize)]")
         .type_attribute("forge.IBPartition", "#[derive(serde::Serialize)]")
         .type_attribute("forge.IBPartitionIdList", "#[derive(serde::Serialize)]")
         .type_attribute("forge.IBPartitionList", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.SpxPartitionList", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.SpxPartition", "#[derive(serde::Serialize)]")
+        .type_attribute("forge.SpxPartitionIdList", "#[derive(serde::Serialize)]")
         .type_attribute("forge.PowerOptionResponse",
                         "#[derive(serde::Deserialize, serde::Serialize)]")
         .type_attribute("forge.PowerOptions",
@@ -385,6 +411,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .type_attribute("forge.VpcPrefix", "#[derive(serde::Serialize)]")
         .type_attribute(
+            "forge.VpcPrefixStateHistoriesRequest",
+            "#[derive(serde::Serialize)]",
+        )
+        .type_attribute(
             "forge.VpcPrefixConfig",
             "#[derive(serde::Serialize)]",
         )
@@ -456,6 +486,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "forge.DhcpDiscovery",
             "#[derive(serde::Deserialize, serde::Serialize)]",
         )
+        .type_attribute("forge.DhcpDiscovery", derive_prost_builder)
         .type_attribute(
             "forge.UserRoles",
             "#[derive(serde::Deserialize, serde::Serialize)]",
@@ -852,15 +883,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "#[derive(serde::Serialize)]",
         )
         .type_attribute(
-            "forge.SpdmListAttestationsResponse",
+            "forge.SpdmGetAttestationMachineResponse",
+            "#[derive(serde::Serialize)]",
+        )
+        .type_attribute(
+            "forge.SpdmListAttestationMachinesResponse",
+            "#[derive(serde::Serialize)]",
+        )
+        .type_attribute(
+            "forge.SpdmMachineAttestationStatus",
             "#[derive(serde::Serialize)]",
         )
         .type_attribute(
             "forge.SpdmAttestationDetails",
             "#[derive(serde::Serialize)]",
         )
-        .type_attribute("forge.ForgeAgentControlResponse.ScoutFirmwareUpgradeTask", "#[derive(serde::Serialize, serde::Deserialize)]")
-        .type_attribute("forge.ForgeAgentControlResponse.FileArtifact", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(
+            "scout_firmware_upgrade.ScoutFirmwareUpgradeTask",
+            "#[derive(serde::Serialize, serde::Deserialize)]",
+        )
+        .type_attribute(
+            "scout_firmware_upgrade.FileArtifact",
+            "#[derive(serde::Serialize, serde::Deserialize)]",
+        )
+        .type_attribute("forge.VpcCreationRequest", derive_prost_builder)
+        .type_attribute("forge.VpcUpdateRequest", derive_prost_builder)
+        .type_attribute("forge.VpcDeletionRequest", derive_prost_builder)
+        .type_attribute("forge.InstanceAllocationRequest", derive_prost_builder)
+        .type_attribute("forge.InstanceConfigUpdateRequest", derive_prost_builder)
+        .type_attribute("forge.InstanceConfig", derive_prost_builder)
+        .type_attribute("forge.ComputeAllocationAttributes", derive_prost_builder)
+        .type_attribute("forge.CreateComputeAllocationRequest", derive_prost_builder)
+        .type_attribute("forge.UpdateComputeAllocationRequest", derive_prost_builder)
+        .type_attribute("forge.DeleteComputeAllocationRequest", derive_prost_builder)
         .build_server(true)
         .build_client(true)
         .protoc_arg("--experimental_allow_proto3_optional")
@@ -868,6 +923,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compile_protos(
             &[
                 "proto/common.proto",
+                "proto/scout_firmware_upgrade.proto",
                 "proto/forge.proto",
                 "proto/machine_discovery.proto",
                 "proto/mlx_device.proto",
@@ -906,6 +962,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (
                 ".common.IBPartitionId",
                 "::carbide_uuid::infiniband::IBPartitionId",
+            ),
+            (
+                ".common.SpxPartitionId",
+                "::carbide_uuid::spx::SpxPartitionId",
             ),
             (".common.InstanceId", "::carbide_uuid::instance::InstanceId"),
             (

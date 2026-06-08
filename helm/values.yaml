@@ -89,10 +89,33 @@ nico-dsx-exchange-consumer:
   enabled: true
 
 ## ---------------------------------------------------------------------------
+## nico-flow — Flow (formerly RLA) rack lifecycle orchestrator
+## Flow ships as a STANDALONE Helm release in its own namespace; it is not
+## installed by `helm install nico ./helm`. The dependency is declared so the
+## chart lives at helm/charts/nico-flow (Helm convention), but the condition
+## keeps the umbrella from auto-rendering it. Deploy with:
+##   helm install flow ./helm/charts/nico-flow -n flow ...
+## (helm-prereqs/setup.sh phase 7i does this for you.)
+## ---------------------------------------------------------------------------
+nico-flow:
+  enabled: false
+
+## ---------------------------------------------------------------------------
 ## nico-hardware-health — Hardware health collector
 ## Collects and reports hardware health metrics from managed machines.
 ## ---------------------------------------------------------------------------
 nico-hardware-health:
+  enabled: true
+
+## ---------------------------------------------------------------------------
+## nico-ntp — chrony NTP servers
+## 3-replica StatefulSet that DPUs and bare-metal hosts sync against
+## (advertised via nico-dhcp.config.kea.hookParameters.ntpServer). DPU
+## pre-ingestion requires synced clocks, so this is enabled by default.
+## Disable only when the provisioning network already has a reachable
+## upstream NTP source.
+## ---------------------------------------------------------------------------
+nico-ntp:
   enabled: true
 
 ## ---------------------------------------------------------------------------
