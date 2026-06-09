@@ -1,4 +1,4 @@
-curl -X POST "https://api.ngc.nvidia.com/v2/org/{tenant-org-name}/nico/vpc" \
+curl -X POST "https://api.example.com/v2/org/{tenant-org-name}/nico/vpc" \
 -H "Content-Type: application/json" -H "Accept: application/json" \
 -H "Authorization: Bearer ${TOKEN}" \
 -d '{

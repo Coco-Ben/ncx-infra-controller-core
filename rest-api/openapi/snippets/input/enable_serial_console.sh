@@ -1,4 +1,4 @@
-curl -X PATCH "https://api.ngc.nvidia.com/v2/org/{provider-org-name}/nico/site/2ae25bd4-7b07-4b39-9514-031e5c335f4f" \
+curl -X PATCH "https://api.example.com/v2/org/{provider-org-name}/nico/site/2ae25bd4-7b07-4b39-9514-031e5c335f4f" \
   -H "Content-Type: application/json" -H "Accept: application/json" \
   -H "Authorization: Bearer ${TOKEN}" \
   -d '{

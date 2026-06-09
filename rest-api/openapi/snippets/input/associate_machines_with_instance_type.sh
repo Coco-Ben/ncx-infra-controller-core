@@ -1,4 +1,4 @@
-curl -X POST "https://api.ngc.nvidia.com/v2/org/{provider-org-name}/nico/instance/type/9c4aaa6a-3934-4274-b0a9-5143b253039e/machine" \
+curl -X POST "https://api.example.com/v2/org/{provider-org-name}/nico/instance/type/9c4aaa6a-3934-4274-b0a9-5143b253039e/machine" \
 -H "Content-Type: application/json" -H "Accept: application/json" \
 -H "Authorization: Bearer ${TOKEN}" \
 -d '{
