@@ -19,14 +19,7 @@
           "updated": "2023-10-18T19:44:38.921567Z"
         }
       ],
-      "deprecations": [
-        {
-          "attribute": "blockSize",
-          "replacedby": "prefixLength",
-          "effective": "2023-04-15T00:00:00Z",
-          "notice": "\"'blockSize' has been deprecated in favor of 'prefixLength'. Please take action immediately\""
-        }
-      ],
+      "deprecations": [],
       "created": "2023-10-18T19:44:38.921567Z",
       "updated": "2023-10-18T19:44:38.921567Z"
     },
@@ -50,14 +43,7 @@
           "updated": "2023-10-16T17:20:21.214662Z"
         }
       ],
-      "deprecations": [
-        {
-          "attribute": "blockSize",
-          "replacedby": "prefixLength",
-          "effective": "2023-04-15T00:00:00Z",
-          "notice": "\"'blockSize' has been deprecated in favor of 'prefixLength'. Please take action immediately\""
-        }
-      ],
+      "deprecations": [],
       "created": "2023-10-16T17:20:21.214662Z",
       "updated": "2023-10-16T17:20:21.214662Z"
     },
@@ -81,14 +67,7 @@
           "updated": "2023-04-25T13:49:15.699358Z"
         }
       ],
-      "deprecations": [
-        {
-          "attribute": "blockSize",
-          "replacedby": "prefixLength",
-          "effective": "2023-04-15T00:00:00Z",
-          "notice": "\"'blockSize' has been deprecated in favor of 'prefixLength'. Please take action immediately\""
-        }
-      ],
+      "deprecations": [],
       "created": "2023-04-25T13:49:15.699358Z",
       "updated": "2023-04-25T13:49:15.699358Z"
     }

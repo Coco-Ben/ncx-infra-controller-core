@@ -41,14 +41,7 @@
         "updated": "2023-07-06T16:21:34.916407Z"
         }
     ],
-    "deprecations": [
-        {
-        "attribute": "ipBlockSize",
-        "replacedby": "prefixLength",
-        "effective": "2023-04-15T00:00:00Z",
-        "notice": "\"'ipBlockSize' has been deprecated in favor of 'prefixLength'. Please take action immediately\""
-        }
-    ],
+    "deprecations": [],
     "created": "2023-07-06T16:21:34.916407Z",
     "updated": "2023-07-06T16:25:20.70757Z"
 }

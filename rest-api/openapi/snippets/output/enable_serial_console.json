@@ -13,14 +13,7 @@
   "serialConsoleIdleTimeout": 7200,
   "serialConsoleMaxSessionLength": 86400,
   "isOnline": true,
-  "deprecations": [
-    {
-      "attribute": "sshHostname",
-      "replacedby": "serialConsoleHostname",
-      "effective": "2023-04-28T00:00:00Z",
-      "notice": "\"'sshHostname' has been deprecated in favor of 'serialConsoleHostname'. Please take action immediately\""
-    }
-  ],
+  "deprecations": [],
   "status": "Registered",
   "statusHistory": [
     {

@@ -5,14 +5,10 @@ This section provides example REST API workflows for common NICo tasks. All exam
 ## Viewing Site Inventory
 
 <AccordionGroup>
-  <Accordion title="View Your Provider ID">
-    <Code src="snippets/input/view_provider_id.sh" title="Example Call" />
-    <Code src="snippets/output/view_provider_id.json" title="Example Response" />
-  </Accordion>
   <Accordion title="View Your Sites">
     Use the value of `id` from the output of the preceding example as the value for the infrastructureProviderId URL parameter:
     <Code src="snippets/input/view_sites.sh" title="Example Call" />
-    The site ID in the response is a required input for many configuration requests.
+    The Site ID in the response is a required input for many configuration requests.
     <Code src="snippets/output/view_sites.json" title="Example Response" />
   </Accordion>
   <Accordion title="View Your Machines">
@@ -30,9 +26,9 @@ This section provides example REST API workflows for common NICo tasks. All exam
 ## Managing Virtual Private Clouds
 
 <Note>
-`networkVirtualizationType` supports two VPC networking mechanisms: **FNN** is recommended for all deployments that include DPUs (instances in FNN VPCs reference a `vpcPrefixId` in their interface configuration.);**Legacy** VPCs use subnets instead of VPC prefixes. New deployments with DPUs should use FNN exclusively.
+`networkVirtualizationType` supports two VPC networking mechanisms: **FNN** is recommended for all deployments that include DPUs (instances in FNN VPCs reference a `vpcPrefixId` in their interface configuration.); **Legacy** VPCs use subnets instead of VPC prefixes. New deployments with DPUs should use FNN exclusively.
 
-`tenantId` is the ID of the tenant organization generated during setup. This value is distinct from the organization name used in the API URL path.
+`tenantId` is the ID of the Tenant organization generated during setup. This value is distinct from the organization name used in the API URL path.
 </Note>
 
 <AccordionGroup>
@@ -58,7 +54,7 @@ This section provides example REST API workflows for common NICo tasks. All exam
     <Code src="snippets/output/create_instance_multiple_interfaces.json" title="Example Response" />
   </Accordion>
   <Accordion title="(Optional) Confirm the Instance Status">
-    Poll the instance to confirm the status changes to `Ready`:
+    Poll the Instance to confirm the status changes to `Ready`:
     <Code src="snippets/input/poll_instance_status.sh" title="Example Call" />
     <Code src="snippets/output/poll_instance_status.json" title="Example Response" />
   </Accordion>
@@ -66,7 +62,7 @@ This section provides example REST API workflows for common NICo tasks. All exam
 
 ## Allocating Machines
 
-Before allocating machines, you should have the ID of the instance type. You can get the ID by making a `GET` request to the `/v2/org/{org-name}/nico/instance/type` endpoint and specifying the `infrastructureProviderId=<provider-id>` and `siteId=<site-id>` parameters.
+Before allocating Machines, you should have the ID of the Instance Type. You can get the ID by making a `GET` request to the `/v2/org/{org-name}/nico/instance/type` endpoint and specifying the `infrastructureProviderId=<provider-id>` and `siteId=<site-id>` parameters.
 
 <AccordionGroup>
   <Accordion title="Allocate Compute Instances">
@@ -77,7 +73,7 @@ Before allocating machines, you should have the ID of the instance type. You can
 
 ## Assigning Instance Types to Machines
 
-Before assigning instance types, you should have the ID of the instance type. You can get the ID by making a `GET` request to the `/v2/org/{org-name}/nico/instance/type` endpoint and specifying the `infrastructureProviderId=<provider-id>` and `siteId=<site-id>` parameters.
+Before assigning Instance Types, you should have the ID of the Instance Type. You can get the ID by making a `GET` request to the `/v2/org/{org-name}/nico/instance/type` endpoint and specifying the `siteId=<site-id>` parameter.
 
 <AccordionGroup>
   <Accordion title="Get Machines Without an Instance Type">
@@ -98,7 +94,7 @@ Before adding an operating system image, ensure you have:
 - An iPXE script as a one-line string.
 - **Optional**: A cloud-init script as a one-line string.
 - For the iPXE string and cloud-init string, replace newline characters with `\n` and escape quotation marks with `\"`.
-- Your tenant ID.
+- Your Tenant ID.
 
 <AccordionGroup>
   <Accordion title="Add an Operating System Image">
@@ -109,7 +105,7 @@ Before adding an operating system image, ensure you have:
 
 ## Managing Subnets and VPC Prefixes
 
-Before managing subnets, ensure you have at least one IP block allocated so that you can add a subnet of the IP block address space.
+Before managing Subnets, ensure you have at least one IP Block allocated so that you can add a Subnet of the IP Block address space.
 
 <AccordionGroup>
   <Accordion title="Add a Subnet">
@@ -171,9 +167,9 @@ Before managing subnets, ensure you have at least one IP block allocated so that
     <Code src="snippets/output/enable_serial_console.json" title="Example Response" />
   </Accordion>
   <Accordion title="Add an SSH Key Group">
-    The SSH key should be in RSA, ECDSA, or ED25519 format. Add the SSH key group:
+    The SSH key should be in RSA, ECDSA, or ED25519 format. Add the SSH Key Group:
     <Code src="snippets/input/add_ssh_key_group.sh" title="Example Call" />
-    Note the value of the `version` field — you will need it to update the key group.
+    Note the value of the `version` field — you will need it to update the SSH Key Group.
     <Code src="snippets/output/add_ssh_key_group.json" title="Example Response" />
   </Accordion>
   <Accordion title="Add a Public SSH Key">
@@ -186,16 +182,16 @@ Before managing subnets, ensure you have at least one IP block allocated so that
     <Code src="snippets/output/add_key_to_group.json" title="Example Response" />
   </Accordion>
   <Accordion title="Add Sites to the Key Group">
-    Specify the new and existing site IDs to keep in the `siteIds` field. You can combine this step and the preceding step by specifying both the SSH key IDs and site IDs in the same request.
+    Specify the new and existing Site IDs to keep in the `siteIds` field. You can combine this step and the preceding step by specifying both the SSH Key IDs and Site IDs in the same request.
     <Code src="snippets/input/add_sites_to_key_group.sh" title="Example Call" />
     <Code src="snippets/output/add_sites_to_key_group.json" title="Example Response" />
   </Accordion>
-  <Accordion title="Get Information About Compute Instances in the VPC">
+  <Accordion title="View Instances That Belong to the VPC">
     <Code src="snippets/input/get_vpc_instances.sh" title="Example Call" />
     <Code src="snippets/output/get_vpc_instances.json" title="Example Response" />
   </Accordion>
   <Accordion title="Parse IP Addresses from the Response">
-    Use a command like the following to retrieve the IP addresses from the response, then access the host or application deployed on the compute instance.
+    Use a command like the following to retrieve the IP Addresses from the response, then access the host or application deployed on the Instance.
     <Code src="snippets/input/parse_instance_ip_addresses.sh" title="Example Call" />
     <Code src="snippets/output/parse_instance_ip_addresses.json" title="Example Response" />
   </Accordion>

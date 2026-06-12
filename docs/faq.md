@@ -125,47 +125,47 @@ DPUs report health status (such as if HBN is configured correctly, if BGP peerin
 
 This information is also visible in the admin web UI. Furthermore, you can SSH to the DPU and poke around if the issue isn't obvious using these methods.
 
-**What are the valid instance status values and what is the typical lifecycle order?**
+**What are the valid Instance status values and what is the typical lifecycle order?**
 
-The `InstanceStatus` field takes one of the following values: `Pending`, `Provisioning`, `Configuring`, `Ready`, `Updating`, `Rebooting`, `Terminating`, `Error`.
+The `Instance.Status` field takes one of the following values: `Pending`, `Provisioning`, `Configuring`, `Repairing`, `Ready`, `Updating`, `Rebooting`, `Terminating`, `Error`.
 
 The typical lifecycle is `Pending` -> `Provisioning` -> `Ready` -> `Terminating`.
 
-- `Configuring`: Appears after the instance reaches `Ready` and is subsequently reconfigured via the PATCH endpoint (for example, adding or removing InfiniBand partitions). The instance returns to `Ready` once reconfiguration completes.
-- `Updating`: Appears when a software update is applied. Updates require an explicit opt-in: the instance must be rebooted with the `applyUpdatesOnReboot` flag set.
+- `Configuring`: Appears after the Instance reaches `Ready` and is subsequently reconfigured via the PATCH endpoint (for example, adding or removing InfiniBand partitions). The Instance returns to `Ready` once reconfiguration completes.
+- `Updating`: Appears when a software update is applied. Updates require an explicit opt-in: the Instance must be rebooted with the `applyUpdatesOnReboot` flag set.
 - `Rebooting`: Appears briefly during a reboot request.
 - `Error`: Indicates a failure condition, such as a loss of communication between `nico-rest` and `nico-core`.
 
-**Are status change events emitted for instances, or is polling required?**
+**Are status change events emitted for Instances, or is polling required?**
 
-NICo emits MQTT events for machine state changes. Because MQTT messages can be lost in transit, and because machine health (not only state) is a required signal for determining readiness, polling the REST API is the recommended approach for tracking instance status.
+NICo REST is designed to respond to polling requests efficiently; a 5s or 10s interval polling should be sufficient for tracking Instance status changes.
 
-**How does interface, InfiniBand, or NVLink status relate to instance readiness?**
+**How does Ethernet, InfiniBand or NVLink Interface status relate to Instance readiness?**
 
-All interfaces requested at instance creation must be fully configured before the instance transitions to `Ready`. Internally, the gRPC API exposes `configs_synced` fields for each subsystem (networking, InfiniBand, NVLink), while any subsystem remains unsynced:
+All Interfaces requested at Instance creation must be fully configured before the Instance transitions to `Ready`. Each subsystem (Ethernet, InfiniBand, NVLink) configuration becomes synced independently, and Instance readiness takes them all into account.
 
 - An instance in initial provisioning stays in `Provisioning` rather than advancing to `Ready`.
 - An instance that has previously reached `Ready` transitions to `Configuring`.
 
-**How is machine status mapped to instance status?**
+**How is Machine status mapped to Instance status?**
 
-The `MachineStatus` field takes one of the following values: `Initializing`, `Ready`, `Reset`, `Maintenance`, `InUse`, `Error`, `Decommissioned`, `Unknown`.
+The `Machine.Status` field takes one of the following values: `Initializing`, `Ready`, `Reset`, `Maintenance`, `InUse`, `Error`, `Decommissioned`, `Unknown`.
 
-When a machine is assigned to a tenant as an instance it reports `InUse`. An `Error` status may indicate an error condition regardless of whether the machine is currently assigned to a tenant.
+When a Machine is assigned to a tenant as an Instance it reports `InUse`. An `Error` status may indicate an error condition regardless of whether the Machine is currently assigned to a tenant.
 
-**Are there SLAs defined for instance lifecycle state transitions?**
+**Are there SLAs defined for Instance lifecycle state transitions?**
 
-SLAs are defined per machine lifecycle state. When a machine remains in a given state longer than the configured SLA threshold, the gRPC API sets `time_in_state_above_sla: true` on that object. This condition is also surfaced in the admin web UI. The metric `nico_machines_per_state_above_sla` tracks the count of machines exceeding SLA thresholds per state.
+SLAs are defined per Machine lifecycle state. When a Machine remains in a given state longer than the configured SLA threshold, the gRPC API sets `time_in_state_above_sla: true` on that object. This condition is also surfaced in the admin web UI. The metric `nico_machines_per_state_above_sla` tracks the count of Machines exceeding SLA thresholds per state.
 
-**What validation is performed after a compute instance reports `Ready`?**
+**What validation is performed after an Instance reports `Ready`?**
 
 NICo runs both in-band validation tests (executed on the host while it is not leased to a tenant) and out-of-band validation tests (executed against the BMC). The in-band tests ("machine-validation tests") are configurable by the site administrator and are implemented as shell scripts; NICo evaluates the exit code to determine pass or fail. The results of all health checks are aggregated into the `health` property of the `Machine` object. Refer to the [health aggregation architecture documentation](../architecture/health_aggregation.md) for a full list of checks.
 
-**How can NSG and SSH key sync status be verified after instance creation?**
+**How can network security group (NSG) and SSH key sync status be verified after Instance creation?**
 
 For SSH key groups, the `status` field of the key group object indicates `Syncing` or `Synced`, reflecting whether the key group has been propagated to all associated sites.
 
-For NSGs, the gRPC API provides a method to check whether an NSG has been rolled out to all affected instances and DPUs. This capability is not currently exposed on the REST API.
+For NSGs, the gRPC API provides a method to check whether an NSG has been rolled out to all affected Instances and DPUs; the REST API provides the `attachmentStatus` attribute for Network Security Group objects to convey this information
 
 **How are synchronous API errors distinguished from asynchronous failures?**
 
@@ -174,23 +174,23 @@ NICo APIs perform argument validation synchronously. An invalid request returns 
 **What are the common failure modes and how do they surface in the API?**
 
 - **Subnet or VPC prefix mismatch, or insufficient capacity**: Returns a synchronous `4xx` error.
-- **Unhealthy machine**: Reflected in the `health` property of the `Machine` object.
+- **Unhealthy Machine**: Reflected in the `health` property of the `Machine` object.
 - **PXE boot failure on a tenant OS**: NICo does not directly detect OS boot failures. These must be diagnosed via the serial console logs accessible through the SSH console feature.
 
-**What are the standard remediation paths for a failed or stuck compute instance?**
+**What are the standard remediation paths for a failed or stuck Instance?**
 
 The appropriate remediation depends on the failure mode. Common approaches include:
 
-- **PATCH with reboot**: Use the PATCH endpoint to reboot the instance, optionally with `applyUpdatesOnReboot: true` to apply pending software updates.
+- **PATCH with reboot**: Use the PATCH endpoint to reboot the Instance, optionally with `applyUpdatesOnReboot: true` to apply pending software updates.
 - **Force-delete and re-ingest**: Remove the machine from NICo inventory and re-ingest it from scratch. This is a costly operation that results in loss of user data on the machine.
 
 Resetting the BMC is a commonly effective remediation step before escalating to force-delete.
 
-**How is a machine stuck in `Provisioning` handled?**
+**How is a Machine stuck in `Provisioning` handled?**
 
 NICo enforces SLA thresholds on each lifecycle state and emits alerts when thresholds are exceeded. For some states, automated recovery procedures (such as an automatic reboot attempt) are implemented. For states without automated recovery, manual intervention using site-admin runbooks is required.
 
-**What happens when an instance is deleted with `machineHealthIssue` or `isRepairTenant` set?**
+**What happens when an Instance is deleted with `machineHealthIssue` or `isRepairTenant` set?**
 
 Setting `machineHealthIssue: true` on a delete request records a `TenantReportedIssue` health alert on the underlying machine. This alert marks the machine ineligible for allocation to other tenants until it is explicitly cleared.
 
@@ -198,26 +198,26 @@ Setting `machineHealthIssue: true` on a delete request records a `TenantReported
 
 Because NICo REST API calls are designed to return quickly (long-running work is handled asynchronously), a client timeout of approximately one minute is appropriate. Standard HTTP retry conventions apply: `GET` requests are idempotent and can be retried freely. `POST` and `PATCH` requests are not idempotent; retry only when the application can tolerate duplicate or partial side effects.
 
-**Is there an upper bound on waiting for an instance to reach `Ready`?**
+**Is there an upper bound on waiting for an Instance to reach `Ready`?**
 
 NICo does not impose a hard timeout on the provisioning workflow. SLA thresholds per state determine when an object is flagged as overdue (see `time_in_state_above_sla`). The platform does not automatically fail a provisioning workflow; instead, objects that exceed their SLA threshold are surfaced for operator review.
 
 **Is cancellation of an in-progress provisioning workflow supported?**
 
-Cancellation of in-progress provisioning is not supported. Once an instance begins provisioning, it is expected to run through all defined state transitions. Cancellation mid-workflow would leave resources in an undefined state. A tenant may request instance termination immediately after creation; however, the termination steps will not execute until the instance has completed its provisioning states. The same constraint applies to software update workflows.
+Cancellation of in-progress provisioning is not supported. Once an Instance begins provisioning, it is expected to run through all defined state transitions. Cancellation mid-workflow would leave resources in an undefined state. A tenant may request Instance termination immediately after creation; however, the termination steps will not execute until the Instance has completed its provisioning states. The same constraint applies to software update workflows.
 
-**Who is responsible for deleting instances in `Error` states, and what is the policy for orphaned resources?**
+**Who is responsible for deleting Instances in `Error` states, and what is the policy for orphaned resources?**
 
 The site administrator (or operator automation) is responsible for initiating remediation or deleting the underlying `Machine` object. Tenants do not have permission to perform these operations.
 
-Instance objects remain visible to tenants via the REST API even after the underlying machine has been deleted by an administrator. Instances are only removed from the tenant view upon an explicit `DELETE /instance/{id}` call from the tenant. This behavior is intentional: instance objects do not disappear from tenant views without an explicit acknowledgment.
+Instance objects remain visible to tenants via the REST API even after the underlying Machine has been deleted by an administrator. Instances are only removed from the tenant view upon an explicit `DELETE /instance/{id}` call from the tenant. This behavior is intentional: Instance objects do not disappear from tenant views without an explicit acknowledgment.
 
-**What preconditions must be met before an instance delete succeeds?**
+**What preconditions must be met before an Instance delete succeeds?**
 
-Deletion is accepted immediately but the instance must run through all defined deprovisioning states asynchronously. These states include steps to remove the instance from tenant-defined VPCs, InfiniBand partitions, and NVLink partitions. Progress is reflected in the `status` field of the instance object.
+Deletion is accepted immediately but the Instance must run through all defined deprovisioning states asynchronously. These states include steps to remove the Instance from tenant-defined VPCs, InfiniBand partitions, and NVLink partitions. Progress is reflected in the `status` field of the Instance object.
 
 **What metrics and dashboards are available for monitoring NICo deployments?**
 
 A subset of NICo metrics is documented in the [Core Metrics reference](../observability/core_metrics.md). Key metrics for operational monitoring include per-state machine counts and `nico_machines_per_state_above_sla`.
 
-Grafana dashboard definitions for NICo deployments are maintained separately from the open-source package. A dashboard JSON for deployment on a site-local Grafana instance is available in the NICo Helm chart distribution.
+Grafana dashboard definitions for NICo deployments are maintained separately from the open-source package. A dashboard JSON for deployment on a site-local Grafana Instance is available in the NICo Helm chart distribution.

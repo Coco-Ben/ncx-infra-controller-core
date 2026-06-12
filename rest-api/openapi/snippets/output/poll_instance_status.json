@@ -55,20 +55,7 @@
          "updated": "2023-07-06T17:04:00.338968Z"
       }
    ],
-   "deprecations": [
-      {
-         "attribute": "sshUrl",
-         "replacedby": "serialConsoleUrl",
-         "effective": "2023-04-25T00:00:00Z",
-         "notice": "\"'sshUrl' has been deprecated in favor of 'serialConsoleUrl'. Please take action immediately\""
-      },
-      {
-         "attribute": "instanceSubnets",
-         "replacedby": "interfaces",
-         "effective": "2023-05-10T00:00:00Z",
-         "notice": "\"'instanceSubnets' has been deprecated in favor of 'interfaces'. Please take action immediately\""
-      }
-   ],
+   "deprecations": [],
    "created": "2023-07-06T17:04:00.338968Z",
    "updated": "2023-07-06T17:07:23.608281Z"
 }
