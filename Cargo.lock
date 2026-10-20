@@ -2833,6 +2833,7 @@ dependencies = [
  "async-trait",
  "carbide-api-db",
  "carbide-api-model",
+ "carbide-health-report",
  "carbide-instrument",
  "carbide-macros",
  "carbide-rack",
